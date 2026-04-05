@@ -1,0 +1,159 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "blackswan-response-v1.0",
+  "title": "BlackSwan Stress Test Response",
+  "description": "Schema for responses produced by blackswan-core. Every engine response must validate against this schema.",
+  "type": "object",
+  "required": ["version", "status", "runtime_ms", "iterations_completed", "summary", "shatter_points", "scenario_card"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$",
+      "description": "Contract version. Must match the request version."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["failures_detected", "no_failures", "error"],
+      "description": "High-level result. 'no_failures' means all iterations completed with zero shatter points."
+    },
+    "runtime_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total wall-clock time for the simulation run in milliseconds."
+    },
+    "iterations_completed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of simulation iterations actually completed (may be less than requested if cancelled)."
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total_failures", "failure_rate", "unique_failure_types"],
+      "additionalProperties": false,
+      "properties": {
+        "total_failures": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of iterations in which at least one failure was detected."
+        },
+        "failure_rate": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Fraction of completed iterations that contained at least one failure."
+        },
+        "unique_failure_types": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of distinct failure_type values observed across all shatter points."
+        }
+      }
+    },
+    "shatter_points": {
+      "type": "array",
+      "description": "Ordered list of detected failures, most severe first.",
+      "items": {
+        "type": "object",
+        "required": ["id", "line", "column", "severity", "failure_type", "message", "frequency", "causal_chain", "fix_hint"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^sp_\\d+$",
+            "description": "Stable identifier for this shatter point within the response (e.g. sp_001)."
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-indexed source line where the failure manifests."
+          },
+          "column": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "0-indexed column offset within the line."
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "warning", "info"],
+            "description": "critical = model produces incorrect results; warning = potential instability; info = advisory."
+          },
+          "failure_type": {
+            "type": "string",
+            "enum": [
+              "nan_inf",
+              "division_by_zero",
+              "non_psd_matrix",
+              "ill_conditioned_matrix",
+              "bounds_exceeded"
+            ],
+            "description": "Machine-readable failure category. Maps to detector class."
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Human-readable explanation. Must state: what failed, the observed value, and the threshold that was violated."
+          },
+          "frequency": {
+            "type": "string",
+            "pattern": "^\\d+ / \\d+ iterations \\(\\d+(\\.\\d+)?%\\)$",
+            "description": "Human-readable frequency string, e.g. '847 / 5000 iterations (16.9%)'."
+          },
+          "causal_chain": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Ordered list from root input to failure site.",
+            "items": {
+              "type": "object",
+              "required": ["line", "variable", "role"],
+              "additionalProperties": false,
+              "properties": {
+                "line": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "variable": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "role": {
+                  "type": "string",
+                  "enum": ["root_input", "intermediate", "failure_site"]
+                }
+              }
+            }
+          },
+          "fix_hint": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Actionable suggestion for how to guard against this failure."
+          }
+        }
+      }
+    },
+    "scenario_card": {
+      "type": "object",
+      "required": ["name", "parameters_applied", "seed", "reproducible"],
+      "additionalProperties": false,
+      "description": "Captures exactly how the simulation was run so results can be reproduced.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parameters_applied": {
+          "type": "object",
+          "description": "Key-value map of all scenario parameters as actually applied (after any clamping/defaults)."
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reproducible": {
+          "type": "boolean",
+          "description": "Must be true. If the engine cannot guarantee determinism, it must return an error instead."
+        }
+      }
+    }
+  }
+}

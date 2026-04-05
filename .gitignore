@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+
+# Project specific
+.claude/
+*.local.json
+request_stress_test.json
+response_shatter_points.json
+
+# Markdown exclusion (as per user request for this commit)
+# *.md
