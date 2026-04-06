@@ -94,3 +94,5 @@ BlackSwan V1 is deliberately focused on portfolio risk, covariance/correlation a
 ## 🤝 Contributing
 BlackSwan's engine and VS Code extension are deeply decoupled. If you are interested in adding new numerical detectors or contributing to the AST parser, please see our [ARCHITECTURE.md](docs/ARCHITECTURE.md) and [CONTRIBUTING.md](docs/CONTRIBUTING.md) guides.
 
+## 📄 License
+[MIT License](LICENSE)
