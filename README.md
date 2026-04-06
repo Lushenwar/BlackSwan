@@ -11,7 +11,7 @@ BlackSwan is a VS Code extension backed by a decoupled Python engine. It stress-
 
 ---
 
-## 🚀 Features
+## Features
 
 - **Line-Level Attribution:** Draws red squiggly lines on the exact line of code responsible for a mathematical failure.
 - **Causal Chains:** Hover over a failure to see the exact chain of variables that led from the perturbed input to the shatter point.
@@ -26,7 +26,7 @@ BlackSwan is a VS Code extension backed by a decoupled Python engine. It stress-
 
 ---
 
-## 📦 Installation
+## Installation
 
 BlackSwan consists of two independent systems: the **Python Engine** (which does the heavy lifting) and the **VS Code Extension** (which renders the results). **You must install both.**
 
@@ -52,7 +52,7 @@ Currently, BlackSwan is distributed as a `.vsix` package.
 
 ---
 
-## 🛠️ Usage
+## Usage
 
 ### Using the VS Code Extension (Recommended)
 1. Open a Python file containing financial or mathematical functions.
@@ -75,7 +75,7 @@ The CLI outputs a structured JSON report detailing all shatter points, causal ch
 
 ---
 
-## 🎯 Supported Code Patterns
+## Supported Code Patterns
 BlackSwan V1 is deliberately focused on portfolio risk, covariance/correlation analysis, and VaR-style risk models.
 
 **Supported:**
@@ -94,5 +94,3 @@ BlackSwan V1 is deliberately focused on portfolio risk, covariance/correlation a
 ## 🤝 Contributing
 BlackSwan's engine and VS Code extension are deeply decoupled. If you are interested in adding new numerical detectors or contributing to the AST parser, please see our [ARCHITECTURE.md](docs/ARCHITECTURE.md) and [CONTRIBUTING.md](docs/CONTRIBUTING.md) guides.
 
-## 📄 License
-[MIT License](LICENSE)
