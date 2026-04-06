@@ -1,0 +1,27 @@
+name: correlation_breakdown
+display_name: Correlation Breakdown
+description: >
+  Large pairwise correlation increase with moderate vol expansion. Primary
+  stressor for covariance matrix PSD failures and ill-conditioned inversions.
+  Representative of crisis contagion events where diversification disappears.
+
+defaults:
+  iterations: 5000
+  seed: 42
+
+perturbations:
+  - target: correlation
+    type: additive
+    distribution: uniform
+    params:
+      low: 0.20
+      high: 0.50
+    constraints:
+      clip_max: 0.99
+
+  - target: vol
+    type: multiplicative
+    distribution: uniform
+    params:
+      low: 1.2
+      high: 1.5

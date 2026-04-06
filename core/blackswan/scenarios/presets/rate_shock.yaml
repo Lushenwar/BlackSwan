@@ -1,0 +1,25 @@
+name: rate_shock
+display_name: Rate Shock
+description: >
+  Rapid interest rate increase combined with credit spread widening. Targets
+  fixed-income and rate-sensitive equity models. Representative of the 2022
+  Fed tightening cycle or the 1994 bond massacre.
+
+defaults:
+  iterations: 5000
+  seed: 42
+
+perturbations:
+  - target: interest_rate
+    type: additive
+    distribution: uniform
+    params:
+      low: 100
+      high: 300
+
+  - target: spread
+    type: additive
+    distribution: uniform
+    params:
+      low: 50
+      high: 150

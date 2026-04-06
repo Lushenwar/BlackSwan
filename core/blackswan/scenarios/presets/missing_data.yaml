@@ -1,0 +1,25 @@
+name: missing_data
+display_name: Missing Data
+description: >
+  Random NaN injection and time series truncation. Tests model robustness to
+  data gaps, stale prices, and feed outages. Representative of end-of-day data
+  quality issues or vendor feed failures.
+
+defaults:
+  iterations: 5000
+  seed: 42
+
+perturbations:
+  - target: data_completeness
+    type: nan_injection
+    distribution: uniform
+    params:
+      low: 0.05
+      high: 0.20
+
+  - target: history_length
+    type: truncation
+    distribution: uniform
+    params:
+      low: 0.60
+      high: 0.90

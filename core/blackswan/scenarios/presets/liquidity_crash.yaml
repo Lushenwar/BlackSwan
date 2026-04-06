@@ -1,0 +1,41 @@
+name: liquidity_crash
+display_name: Liquidity Crash
+description: >
+  Simulates a sudden collapse in market liquidity: spreads widen sharply,
+  volatility surges, correlations spike toward 1, and turnover capacity drops.
+  Representative of March 2020, Q4 2018, or the 2008 credit crisis.
+
+defaults:
+  iterations: 5000
+  seed: 42
+
+perturbations:
+  - target: spread
+    type: multiplicative
+    distribution: uniform
+    params:
+      low: 1.5
+      high: 3.5
+
+  - target: vol
+    type: multiplicative
+    distribution: lognormal
+    params:
+      mu: 1.8
+      sigma: 0.3
+
+  - target: correlation
+    type: additive
+    distribution: uniform
+    params:
+      low: 0.10
+      high: 0.35
+    constraints:
+      clip_max: 0.99
+
+  - target: turnover
+    type: multiplicative
+    distribution: uniform
+    params:
+      low: 0.30
+      high: 0.70

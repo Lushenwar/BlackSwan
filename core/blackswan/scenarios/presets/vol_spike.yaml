@@ -1,0 +1,27 @@
+name: vol_spike
+display_name: Volatility Spike
+description: >
+  Pure volatility shock with modest correlation drift. No spread or liquidity
+  component. Volatility multiplied 2x–4x across all assets. Representative of
+  sudden VIX spikes or single-asset vol events.
+
+defaults:
+  iterations: 5000
+  seed: 42
+
+perturbations:
+  - target: vol
+    type: multiplicative
+    distribution: uniform
+    params:
+      low: 2.0
+      high: 4.0
+
+  - target: correlation
+    type: additive
+    distribution: uniform
+    params:
+      low: 0.05
+      high: 0.15
+    constraints:
+      clip_max: 0.99
