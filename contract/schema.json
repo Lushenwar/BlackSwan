@@ -64,14 +64,12 @@
             "description": "Stable identifier for this shatter point within the response (e.g. sp_001)."
           },
           "line": {
-            "type": "integer",
-            "minimum": 1,
-            "description": "1-indexed source line where the failure manifests."
+            "type": ["integer", "null"],
+            "description": "1-indexed source line where the failure manifests. Null when attribution could not be resolved (Phase 1 limitation)."
           },
           "column": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "0-indexed column offset within the line."
+            "type": ["integer", "null"],
+            "description": "0-indexed column offset within the line. Null in Phase 1 (column attribution not yet implemented)."
           },
           "severity": {
             "type": "string",
@@ -101,8 +99,7 @@
           },
           "causal_chain": {
             "type": "array",
-            "minItems": 1,
-            "description": "Ordered list from root input to failure site.",
+            "description": "Ordered list from root input to failure site. Empty in Phase 1 (full causal walk implemented in Phase 2).",
             "items": {
               "type": "object",
               "required": ["line", "variable", "role"],
@@ -125,8 +122,7 @@
           },
           "fix_hint": {
             "type": "string",
-            "minLength": 1,
-            "description": "Actionable suggestion for how to guard against this failure."
+            "description": "Actionable suggestion for how to guard against this failure. Empty string in Phase 1."
           }
         }
       }

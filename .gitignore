@@ -14,4 +14,20 @@ request_stress_test.json
 response_shatter_points.json
 
 # Markdown exclusion (as per user request for this commit)
+# Markdown exclusion (as per user request for this commit)
 # *.md
+
+# AI & Temp Files
+CLAUDE.md
+blackswan_claude_md_prompt.md
+.git_status_output.txt
+status_utf8.txt
+
+# Coverage
+.coverage
+.pytest_cache/
+
+# Extension Dependencies
+extension/node_modules/
+extension/out/
+extension/dist/

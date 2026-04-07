@@ -21,10 +21,8 @@ from pathlib import Path
 from typing import Any
 
 from .attribution.traceback import TracebackResolver
-from .detectors.matrix import ConditionNumberDetector, MatrixPSDDetector
-from .detectors.numerical import DivisionStabilityDetector, NaNInfDetector
-from .detectors.portfolio import BoundsDetector
 from .engine.runner import RunResult, StressRunner
+from .parser.auto_tagger import AutoTagger
 from .scenarios.registry import list_scenarios, load_scenario
 
 
@@ -135,14 +133,8 @@ def _cmd_test(args: argparse.Namespace) -> None:
     iterations = args.iterations if args.iterations is not None else scenario.default_iterations
     seed = args.seed if args.seed is not None else scenario.default_seed
 
-    # Run with all five detectors active.
-    detectors = [
-        NaNInfDetector(),
-        DivisionStabilityDetector(),
-        MatrixPSDDetector(),
-        ConditionNumberDetector(),
-        BoundsDetector(),
-    ]
+    # Select detector suite automatically from AST analysis of the target file.
+    detectors = AutoTagger(file_path).detector_suite()
     runner = StressRunner(
         fn=fn,
         base_inputs=base_inputs,
