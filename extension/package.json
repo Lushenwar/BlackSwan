@@ -1,0 +1,56 @@
+{
+  "name": "blackswan-vscode",
+  "displayName": "BlackSwan",
+  "description": "Stress-test mathematical and financial logic in Python code.",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:python"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "blackswan.runStressTest",
+        "title": "Run BlackSwan Stress Test",
+        "category": "BlackSwan"
+      }
+    ],
+    "configuration": {
+      "title": "BlackSwan",
+      "properties": {
+        "blackswan.pythonPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the Python executable used to run the BlackSwan engine. Leave empty to use the Python extension's interpreter or the system default."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p tsconfig.json",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.0",
+    "typescript": "^5.4.0"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "roots": ["<rootDir>/test"],
+    "testMatch": ["**/*.test.ts"],
+    "transform": {
+      "^.+\\.ts$": ["ts-jest", { "tsconfig": "tsconfig.json" }]
+    },
+    "moduleNameMapper": {
+      "^vscode$": "<rootDir>/__mocks__/vscode.ts"
+    }
+  }
+}
