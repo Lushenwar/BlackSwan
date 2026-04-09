@@ -30,12 +30,20 @@ class RunResult:
     findings contains every Finding produced across all iterations,
     in the order they were detected. The attribution layer (Phase 1D)
     will later enrich these with line numbers and causal chains.
+
+    iterations_completed counts only iterations where the target function was
+    actually called (validator-skipped iterations are excluded).
+
+    baseline_established is True when the pre-loop baseline call succeeded.
+    False means the target function raised on unperturbed inputs — all
+    subsequent findings should be interpreted with caution.
     """
 
     iterations_completed: int
     findings: list[Finding]
     runtime_ms: int
     seed: int
+    baseline_established: bool = True
 
 
 class StressRunner:
@@ -78,13 +86,47 @@ class StressRunner:
 
         The RNG is created fresh here from self.seed so that calling run()
         twice on the same instance produces identical results.
+
+        Before the loop:
+        - Run the target function once on base_inputs to establish a baseline.
+          Detectors that implement reset() and set_baseline() are initialised
+          here so they can calibrate relative to the un-perturbed output.
+        - Build a PlausibilityValidator from the scenario if it exposes
+          make_validator().  Iterations whose perturbed inputs fail validation
+          are skipped silently (no finding, no count impact).
         """
         rng = np.random.default_rng(self.seed)
         findings: list[Finding] = []
         start = time.monotonic()
 
+        # --- Pre-loop baseline pass -------------------------------------------
+        baseline_established = True
+        try:
+            base_output = self.fn(**self.base_inputs)
+        except Exception:
+            base_output = None
+            baseline_established = False
+
+        for detector in self.detectors:
+            if hasattr(detector, "reset"):
+                detector.reset()
+            if base_output is not None and hasattr(detector, "set_baseline"):
+                detector.set_baseline(self.base_inputs, base_output)
+
+        # Build validator (hasattr guard keeps plain duck-typed scenarios working)
+        validator = (
+            self.scenario.make_validator()
+            if hasattr(self.scenario, "make_validator")
+            else None
+        )
+
+        # --- Main simulation loop ---------------------------------------------
+        executed = 0
         for i in range(self.scenario.iterations):
             perturbed = self.scenario.apply(self.base_inputs, rng)
+
+            if validator is not None and not validator.validate(perturbed):
+                continue
 
             try:
                 output = self.fn(**perturbed)
@@ -103,8 +145,10 @@ class StressRunner:
                     iteration=i,
                     exc_frames=frames,
                 ))
+                executed += 1
                 continue
 
+            executed += 1
             for detector in self.detectors:
                 finding = detector.check(
                     inputs=perturbed,
@@ -117,8 +161,9 @@ class StressRunner:
         runtime_ms = int((time.monotonic() - start) * 1000)
 
         return RunResult(
-            iterations_completed=self.scenario.iterations,
+            iterations_completed=executed,
             findings=findings,
             runtime_ms=runtime_ms,
             seed=self.seed,
+            baseline_established=baseline_established,
         )
