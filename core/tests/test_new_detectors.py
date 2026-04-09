@@ -11,7 +11,7 @@ import math
 import numpy as np
 import pytest
 
-from blackswan.detectors.numerical import ExplodingGradientDetector
+from blackswan.detectors.numerical import ExplodingGradientDetector, RegimeShiftDetector
 
 
 # ---------------------------------------------------------------------------
@@ -117,3 +117,109 @@ class TestExplodingGradientDetector:
         same_norm_inputs = {"a": 5.0, "b": 0.0}  # norm = 5 → delta = 0
         result = det.check(same_norm_inputs, 1000.0, iteration=4)
         assert result is not None  # large output delta / ~epsilon input delta
+
+
+# ---------------------------------------------------------------------------
+# TestRegimeShiftDetector
+# ---------------------------------------------------------------------------
+
+class TestRegimeShiftDetector:
+
+    def _feed(self, detector, values):
+        """Feed a sequence of scalar values to the detector; return the last finding."""
+        finding = None
+        for i, v in enumerate(values):
+            finding = detector.check({}, np.array([v]), iteration=i)
+        return finding
+
+    # --- true-negative tests ---
+
+    def test_below_min_history_always_silent(self):
+        """Feed 9 values with min_history=10 → None on every call (never enough history)."""
+        det = RegimeShiftDetector(z_threshold=3.0, min_history=10)
+        finding = self._feed(det, [1.0] * 9)
+        assert finding is None
+
+    def test_normal_output_stays_silent(self):
+        """Values with natural spread: outlier within 2 std → z well below threshold=4.0 → None."""
+        det = RegimeShiftDetector(z_threshold=4.0, min_history=10)
+        # Use values with genuine variance so a mild deviation stays within threshold.
+        # Values: alternating 0.9/1.1 (std ≈ 0.1); then 1.2 → z = (1.2 - mean)/std ≈ 1 < 4
+        values = [0.9, 1.1] * 5 + [1.2]
+        finding = self._feed(det, values)
+        assert finding is None
+
+    def test_constant_output_does_not_raise(self):
+        """All values identical → std=0 → no ZeroDivisionError, returns None."""
+        det = RegimeShiftDetector(z_threshold=3.0, min_history=10)
+        finding = self._feed(det, [5.0] * 15)
+        assert finding is None
+
+    # --- true-positive tests ---
+
+    def test_extreme_outlier_fires(self):
+        """10 values of 1.0, then 1000.0 with z_threshold=3.0 → Finding not None."""
+        det = RegimeShiftDetector(z_threshold=3.0, min_history=10)
+        values = [1.0] * 10 + [1000.0]
+        finding = self._feed(det, values)
+        assert finding is not None
+
+    def test_finding_failure_type_is_nan_inf(self):
+        """Fired finding carries failure_type='nan_inf'."""
+        det = RegimeShiftDetector(z_threshold=3.0, min_history=10)
+        values = [1.0] * 10 + [1000.0]
+        finding = self._feed(det, values)
+        assert finding is not None
+        assert finding.failure_type == "nan_inf"
+
+    def test_finding_severity_is_warning(self):
+        """Fired finding carries severity='warning' (not critical — statistical outlier)."""
+        det = RegimeShiftDetector(z_threshold=3.0, min_history=10)
+        values = [1.0] * 10 + [1000.0]
+        finding = self._feed(det, values)
+        assert finding is not None
+        assert finding.severity == "warning"
+
+    def test_reset_clears_history(self):
+        """Build history, fire, call reset(), feed short history → silent again."""
+        det = RegimeShiftDetector(z_threshold=3.0, min_history=10)
+        # Build history and fire
+        values = [1.0] * 10 + [1000.0]
+        finding = self._feed(det, values)
+        assert finding is not None
+
+        # Reset and feed fewer than min_history values
+        det.reset()
+        finding_after = self._feed(det, [1.0] * 5)
+        assert finding_after is None
+
+    def test_history_accumulates_across_calls(self):
+        """After min_history calls the detector starts firing on outliers."""
+        det = RegimeShiftDetector(z_threshold=3.0, min_history=10)
+        # Feed exactly min_history - 1 values → should be silent
+        for i in range(9):
+            result = det.check({}, np.array([1.0]), iteration=i)
+            assert result is None, f"Should be silent at iteration {i}"
+
+        # 10th call (hits min_history), still a normal value
+        result = det.check({}, np.array([1.0]), iteration=9)
+        assert result is None  # not an outlier
+
+        # 11th call with extreme outlier → now has enough history to fire
+        result = det.check({}, np.array([1000.0]), iteration=10)
+        assert result is not None
+
+    def test_z_score_threshold_respected(self):
+        """z_threshold=2.0 fires sooner than z_threshold=5.0 on the same outlier."""
+        base_values = [1.0] * 10
+        outlier = [50.0]  # moderate outlier
+
+        det_low = RegimeShiftDetector(z_threshold=2.0, min_history=10)
+        det_high = RegimeShiftDetector(z_threshold=5.0, min_history=10)
+
+        finding_low = self._feed(det_low, base_values + outlier)
+        finding_high = self._feed(det_high, base_values + outlier)
+
+        # With a strict threshold (2.0), the outlier fires; with lenient (5.0), it may not
+        assert finding_low is not None
+        assert finding_high is None

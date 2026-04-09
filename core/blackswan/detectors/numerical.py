@@ -205,3 +205,74 @@ class ExplodingGradientDetector(FailureDetector):
             return abs(float(output))
         except (TypeError, ValueError):
             return 0.0
+
+
+class RegimeShiftDetector(FailureDetector):
+    """
+    Flags when output deviates more than z_threshold standard deviations
+    from the running mean across all iterations seen so far.
+
+    Stateful: accumulates output norms. Call reset() before each run.
+    Not triggered until min_history observations collected.
+
+    Severity: warning — a statistical outlier relative to the run's own
+    distribution. Indicates a possible regime shift but not an outright
+    numerical failure like NaN/Inf.
+    """
+
+    FAILURE_TYPE = "nan_inf"
+    DEFAULT_Z_THRESHOLD = 4.0
+    DEFAULT_MIN_HISTORY = 30
+    _EPSILON = 1e-12
+
+    def __init__(
+        self,
+        z_threshold: float = DEFAULT_Z_THRESHOLD,
+        min_history: int = DEFAULT_MIN_HISTORY,
+    ) -> None:
+        self.z_threshold = z_threshold
+        self.min_history = min_history
+        self._history: list[float] = []
+
+    def reset(self) -> None:
+        """Clear accumulated history."""
+        self._history.clear()
+
+    def check(self, inputs: dict, output: Any, iteration: int) -> Finding | None:
+        norm = self._output_norm(output)
+        self._history.append(norm)
+
+        if len(self._history) < self.min_history:
+            return None
+
+        mean = np.mean(self._history)
+        std = np.std(self._history)
+
+        if std < self._EPSILON:
+            return None
+
+        z = abs(norm - mean) / std
+
+        if z <= self.z_threshold:
+            return None
+
+        return Finding(
+            failure_type=self.FAILURE_TYPE,
+            severity="warning",
+            message=(
+                f"Regime shift detected: Z-score={z:.2f} exceeds threshold={self.z_threshold}. "
+                f"Output norm={norm:.4g} deviates significantly from running mean={mean:.4g} "
+                f"(std={std:.4g}) over {len(self._history)} iterations."
+            ),
+            iteration=iteration,
+        )
+
+    @staticmethod
+    def _output_norm(output: Any) -> float:
+        """Return L2 norm of output (ndarray), abs value (scalar), or 0.0."""
+        if isinstance(output, np.ndarray):
+            return float(np.linalg.norm(output.ravel()))
+        try:
+            return abs(float(output))
+        except (TypeError, ValueError):
+            return 0.0
