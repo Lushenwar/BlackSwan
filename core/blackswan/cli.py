@@ -23,7 +23,42 @@ from typing import Any
 from .attribution.traceback import TracebackResolver
 from .engine.runner import RunResult, StressRunner
 from .parser.auto_tagger import AutoTagger
-from .scenarios.registry import list_scenarios, load_scenario
+from .parser.graph import DependencyGraphBuilder
+from .scenarios.registry import list_scenarios, load_scenario, Scenario
+
+
+# ---------------------------------------------------------------------------
+# Static fix hints indexed by failure_type
+# ---------------------------------------------------------------------------
+
+_FIX_HINTS: dict[str, str] = {
+    "non_psd_matrix": (
+        "Apply nearest-PSD correction (e.g. Higham 2002) after correlation "
+        "perturbation, or clamp eigenvalues to a small positive epsilon before "
+        "further use: eigvals, eigvecs = np.linalg.eigh(m); "
+        "m_psd = eigvecs @ np.diag(np.maximum(eigvals, 1e-8)) @ eigvecs.T"
+    ),
+    "ill_conditioned_matrix": (
+        "Check the condition number before inversion with np.linalg.cond(). "
+        "Use np.linalg.lstsq or the pseudo-inverse (np.linalg.pinv) instead of "
+        "direct inversion for ill-conditioned systems (cond > 1e12)."
+    ),
+    "division_by_zero": (
+        "Guard the denominator against near-zero values before dividing: "
+        "use np.where(np.abs(denom) > 1e-10, num / denom, 0.0) or assert "
+        "np.all(np.abs(denom) > 1e-10) at the function boundary."
+    ),
+    "nan_inf": (
+        "Add input validation at the function boundary and check intermediate "
+        "results for NaN/Inf with np.isfinite(). Use bounded perturbation ranges "
+        "in the scenario YAML to prevent extreme inputs."
+    ),
+    "bounds_exceeded": (
+        "Review the output bounds configured in the scenario YAML or add a "
+        "clamp after computation: np.clip(result, lower, upper). Verify that "
+        "input perturbations remain within plausible financial ranges."
+    ),
+}
 
 
 def main() -> None:
@@ -149,7 +184,7 @@ def _cmd_test(args: argparse.Namespace) -> None:
     resolved = [resolver.resolve(f) for f in result.findings]
 
     # Emit the full JSON response to stdout.
-    print(json.dumps(_build_response(resolved, result, scenario.name, seed), indent=2))
+    print(json.dumps(_build_response(resolved, result, scenario, seed, file_path), indent=2))
 
     sys.exit(1 if resolved else 0)
 
@@ -225,8 +260,9 @@ def _load_function(file_path: Path, function_name: str | None) -> tuple:
 def _build_response(
     findings: list,
     result: RunResult,
-    scenario_name: str,
+    scenario: Scenario,
     seed: int,
+    file_path: Path,
 ) -> dict:
     """
     Aggregate per-iteration findings into a contract-compliant response dict.
@@ -234,6 +270,14 @@ def _build_response(
     Findings with the same failure_type are merged into one shatter_point;
     the line from the first (earliest) such finding is used, and the frequency
     string reports how many iterations produced that failure type.
+
+    Also populates:
+      causal_chain     — walked backwards from the failure line via the
+                         dependency graph (DependencyGraphBuilder).
+      fix_hint         — static lookup from _FIX_HINTS by failure_type.
+      parameters_applied — the perturbation spec from the scenario definition,
+                           describing every target, type, distribution, and range
+                           that was active during the run.
     """
     from collections import defaultdict
 
@@ -255,8 +299,8 @@ def _build_response(
             "failure_type": failure_type,
             "message": first.message,
             "frequency": f"{count} / {result.iterations_completed} iterations ({pct:.1f}%)",
-            "causal_chain": [],   # Phase 2 will populate from AST dependency walk
-            "fix_hint": "",       # Phase 2 will derive from failure type + causal chain
+            "causal_chain": _build_causal_chain(first.line, file_path),
+            "fix_hint": _FIX_HINTS.get(failure_type, ""),
         })
 
     total = len(findings)
@@ -274,8 +318,8 @@ def _build_response(
         },
         "shatter_points": shatter_points,
         "scenario_card": {
-            "name": scenario_name,
-            "parameters_applied": {},   # Phase 2 will record applied perturbation values
+            "name": scenario.name,
+            "parameters_applied": _parameters_applied(scenario),
             "seed": seed,
             "reproducible": True,
         },
@@ -285,6 +329,114 @@ def _build_response(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _build_causal_chain(line: int | None, file_path: Path) -> list[dict]:
+    """
+    Build a causal chain for a failure at *line* using the dependency graph.
+
+    Walks the DAG backwards from the failure node to collect root inputs and
+    intermediates, then appends the failure node itself as 'failure_site'.
+    Returns an empty list if *line* is None or graph construction fails for
+    any reason (graceful degradation — the rest of the response is still valid).
+
+    The chain is ordered by source line number (ascending): root inputs appear
+    first, the failure site last.  Unresolved (import / builtin) nodes are
+    excluded since they don't map to user source lines.
+    """
+    if line is None:
+        return []
+    try:
+        graph = DependencyGraphBuilder(file_path).build()
+    except Exception:
+        return []
+
+    node_map: dict[str, Any] = {n.id: n for n in graph.nodes}
+
+    # Reverse-adjacency: node_id → set of predecessor ids (edges flow src→tgt)
+    preds: dict[str, set[str]] = {n.id: set() for n in graph.nodes}
+    for edge in graph.edges:
+        preds[edge.target].add(edge.source)
+
+    # Find the failure node: the node whose lineno == line.
+    # If multiple nodes share the same line, prefer one with detector tags.
+    failure_node = None
+    for node in graph.nodes:
+        if node.lineno == line:
+            if failure_node is None or (
+                node.detector_tags and not failure_node.detector_tags
+            ):
+                failure_node = node
+
+    if failure_node is None:
+        return []
+
+    # BFS backwards from the failure node's direct predecessors.
+    ancestor_ids: set[str] = set()
+    queue: list[str] = list(preds.get(failure_node.id, set()))
+    while queue:
+        current = queue.pop(0)
+        if current in ancestor_ids:
+            continue
+        ancestor_ids.add(current)
+        for pred_id in preds.get(current, set()):
+            if pred_id not in ancestor_ids:
+                queue.append(pred_id)
+
+    # Collect ancestor nodes, excluding unresolved (no lineno) nodes.
+    # Cap at 20 entries to keep the chain readable.
+    chain_nodes = sorted(
+        [
+            node_map[nid]
+            for nid in ancestor_ids
+            if nid in node_map
+            and node_map[nid].lineno is not None
+            and node_map[nid].node_type != "unresolved_input"
+        ],
+        key=lambda n: n.lineno or 0,
+    )[:20]
+
+    result: list[dict] = []
+    for node in chain_nodes:
+        result.append({
+            "line": node.lineno,
+            "variable": node.label,
+            "role": node.node_type,
+        })
+
+    # Failure site is always last.
+    result.append({
+        "line": failure_node.lineno,
+        "variable": failure_node.label,
+        "role": "failure_site",
+    })
+
+    return result
+
+
+def _parameters_applied(scenario: Scenario) -> dict:
+    """
+    Summarise the perturbation specification from *scenario* as a plain dict.
+
+    Keyed by perturbation target name; value describes the type, distribution,
+    and numeric range so the scenario_card is self-documenting.
+    """
+    applied: dict[str, Any] = {}
+    for p in scenario.perturbations:
+        entry: dict[str, Any] = {
+            "type": p.type,
+            "distribution": p.distribution,
+        }
+        # Include distribution parameters verbatim so the card is reproducible.
+        entry.update(p.params)
+        if p.clamp is not None:
+            lo, hi = p.clamp
+            if lo is not None:
+                entry["clip_min"] = lo
+            if hi is not None:
+                entry["clip_max"] = hi
+        applied[p.target] = entry
+    return applied
+
 
 class _IterationOverride:
     """

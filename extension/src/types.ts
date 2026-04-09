@@ -127,7 +127,15 @@ export interface BridgeOptions {
   /**
    * Cancellation signal. Abort this signal to kill the engine process and
    * reject the returned promise. Wire a VS Code CancellationToken to this
-   * via AbortController in progress.ts — keeps this module VS Code-free.
+   * via AbortController in the orchestrator — keeps this module VS Code-free.
    */
   signal?: AbortSignal;
+  /**
+   * Streaming progress callback. Called with (completed, total) on each
+   * intermediate progress event when the engine supports NDJSON streaming.
+   * Also called once with the final iteration count after a successful run
+   * so the progress bar advances to 100% in bulk mode.
+   * Safe to omit — the bridge is a no-op if this is not set.
+   */
+  onProgress?: (completed: number, total: number) => void;
 }

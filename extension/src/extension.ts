@@ -16,7 +16,9 @@ import {
   BlackSwanCodeLensProvider,
   CODELENS_COMMAND,
 } from "./codelens";
+import { DagPanelController } from "./dagPanel";
 import { DiagnosticsController } from "./diagnostics";
+import { BlackSwanHoverProvider } from "./hover";
 import { Orchestrator } from "./orchestrator";
 
 // ---------------------------------------------------------------------------
@@ -59,16 +61,24 @@ const SCENARIO_ITEMS: vscode.QuickPickItem[] = [
 export function activate(context: vscode.ExtensionContext): void {
   // ── Build the component graph ─────────────────────────────────────────────
   const diagnostics  = new DiagnosticsController(context);
-  const orchestrator = new Orchestrator(diagnostics);
+  const hover        = new BlackSwanHoverProvider();
+  const dag          = new DagPanelController();
+  const orchestrator = new Orchestrator(diagnostics, hover, dag);
   const codeLens     = new BlackSwanCodeLensProvider();
 
-  // ── Register CodeLens provider ───────────────────────────────────────────
+  // ── Register providers ───────────────────────────────────────────────────
   context.subscriptions.push(
     vscode.languages.registerCodeLensProvider(
       { language: "python", scheme: "file" },
       codeLens,
     ),
+    vscode.languages.registerHoverProvider(
+      { language: "python", scheme: "file" },
+      hover,
+    ),
     codeLens,
+    hover,
+    dag,
     orchestrator,
     // DiagnosticsController registers its own disposables via context in its
     // constructor, so we don't push it again here.

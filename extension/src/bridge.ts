@@ -199,7 +199,15 @@ export async function runBlackSwanEngine(
 
       // EngineProtocolError — valid JSON but wrong shape.
       try {
-        settle(() => resolve(validateEngineResponse(parsed)));
+        const validated = validateEngineResponse(parsed);
+        // Report final iteration count so the progress bar reaches 100% in
+        // bulk mode (single-shot engine output, no streaming). In streaming
+        // mode this is a redundant but harmless call.
+        options.onProgress?.(
+          validated.iterations_completed,
+          validated.iterations_completed,
+        );
+        settle(() => resolve(validated));
       } catch (err) {
         settle(() => reject(err));
       }

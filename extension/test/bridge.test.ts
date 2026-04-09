@@ -107,10 +107,12 @@ describe("runBlackSwanEngine — successful runs", () => {
     expect(response.shatter_points.length).toBeGreaterThan(0);
   });
 
-  test("broken_covariance shatter_points contain nan_inf failure", async () => {
+  test("broken_covariance shatter_points contain non_psd_matrix failure", async () => {
     const response = await runBlackSwanEngine(BROKEN_COV, "liquidity_crash", opts());
     const types = response.shatter_points.map((sp) => sp.failure_type);
-    expect(types).toContain("nan_inf");
+    // liquidity_crash perturbs `correlation` (additive), pushing pairwise
+    // correlations above 1.0 → covariance matrix loses PSD.
+    expect(types).toContain("non_psd_matrix");
   });
 
   test("shatter_point fields conform to contract shape", async () => {

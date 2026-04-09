@@ -16,21 +16,19 @@
 import * as path from "path";
 import * as vscode from "vscode";
 import { runBlackSwanEngine } from "./bridge";
+import { DagPanelController } from "./dagPanel";
 import { DiagnosticsController } from "./diagnostics";
+import { BlackSwanHoverProvider } from "./hover";
+import {
+  formatProgressTitle,
+  ProgressSession,
+  SCENARIO_LABELS,
+} from "./progress";
 import {
   EngineFrameworkError,
   EngineProtocolError,
   EngineRuntimeError,
 } from "./types";
-
-/** Display labels for the progress bar title — keeps messages human-readable. */
-const SCENARIO_LABELS: Record<string, string> = {
-  liquidity_crash:       "Liquidity Crash",
-  vol_spike:             "Vol Spike",
-  correlation_breakdown: "Correlation Breakdown",
-  rate_shock:            "Rate Shock",
-  missing_data:          "Missing Data",
-};
 
 export class Orchestrator implements vscode.Disposable {
   /**
@@ -39,9 +37,17 @@ export class Orchestrator implements vscode.Disposable {
    */
   private readonly _running = new Map<string, AbortController>();
   private readonly _diagnostics: DiagnosticsController;
+  private readonly _hover?: BlackSwanHoverProvider;
+  private readonly _dag?: DagPanelController;
 
-  constructor(diagnostics: DiagnosticsController) {
+  constructor(
+    diagnostics: DiagnosticsController,
+    hover?: BlackSwanHoverProvider,
+    dag?: DagPanelController,
+  ) {
     this._diagnostics = diagnostics;
+    this._hover = hover;
+    this._dag = dag;
   }
 
   // ---------------------------------------------------------------------------
@@ -90,23 +96,34 @@ export class Orchestrator implements vscode.Disposable {
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: `BlackSwan: Stress testing "${fileName}" [${scenarioLabel}]`,
+          title: formatProgressTitle(fileName, scenarioLabel),
           cancellable: true,
         },
-        async (_progress, token) => {
+        async (progress, token) => {
           // Wire VS Code's cancellation token → AbortController signal so
           // the bridge can kill the Python process when the user hits ✕.
           token.onCancellationRequested(() => controller.abort());
+
+          // ProgressSession starts the notification in indeterminate mode
+          // ("Running N iterations…"). The bridge calls onProgress() with the
+          // final count on completion, which advances the bar to 100%.
+          const session = new ProgressSession(progress, 5000);
 
           const response = await runBlackSwanEngine(fsPath, scenarioName, {
             pythonPath: this._resolvePythonPath(),
             functionName,
             cwd: path.dirname(fsPath),
             signal: controller.signal,
+            onProgress: (completed, total) =>
+              session.reportIterations(completed, total),
           });
 
           // Push results to the Diagnostics API — red squiggles appear here.
           this._diagnostics.apply(document, response);
+          // Update the hover store so tooltips reflect the latest run.
+          this._hover?.set(document.uri, response.shatter_points);
+          // Open / update the dependency graph panel.
+          this._dag?.show(response, document.uri);
 
           const { total_failures } = response.summary;
           if (total_failures === 0) {
@@ -158,8 +175,9 @@ export class Orchestrator implements vscode.Disposable {
    */
   private _handleError(err: unknown, uri: vscode.Uri, fileName: string): void {
     if (err instanceof Error && /cancelled/i.test(err.message)) {
-      // User hit ✕ on the progress bar — clear stale diagnostics and be quiet.
+      // User hit ✕ on the progress bar — clear stale diagnostics and hovers, be quiet.
       this._diagnostics.clear(uri);
+      this._hover?.clear(uri);
       return;
     }
 
