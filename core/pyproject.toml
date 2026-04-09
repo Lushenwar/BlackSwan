@@ -6,7 +6,36 @@ build-backend = "setuptools.build_meta"
 name = "blackswan"
 version = "0.1.0"
 description = "Stress-test mathematical and financial logic in Python code — find the exact line where models break."
+readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "Ryan Qi" },
+]
+keywords = [
+    "stress-testing",
+    "quantitative-finance",
+    "risk-model",
+    "monte-carlo",
+    "numerical-stability",
+    "financial-modeling",
+    "debugger",
+    "var",
+    "covariance",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Debuggers",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Office/Business :: Financial",
+]
 dependencies = [
     "numpy>=1.26",
     "pyyaml>=6.0",
@@ -18,6 +47,11 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=4.1",
 ]
+
+[project.urls]
+Homepage   = "https://github.com/Lushenwar/BlackSwan"
+Repository = "https://github.com/Lushenwar/BlackSwan"
+"Bug Tracker" = "https://github.com/Lushenwar/BlackSwan/issues"
 
 [project.scripts]
 blackswan = "blackswan.cli:main"
