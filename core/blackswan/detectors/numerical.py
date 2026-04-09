@@ -125,3 +125,83 @@ class DivisionStabilityDetector(FailureDetector):
             ),
             iteration=iteration,
         )
+
+
+class ExplodingGradientDetector(FailureDetector):
+    """
+    Flags iterations where ||Δoutput|| / ||Δinput|| exceeds a threshold.
+
+    Call set_baseline(base_inputs, base_output) before the run loop.
+    Without a baseline this detector is silently disabled.
+
+    The ratio measures how much the output magnitude changed relative to the
+    input magnitude change. A very high ratio indicates the model is amplifying
+    small input perturbations into large output swings — a sign of numerical
+    instability that can destroy downstream risk metrics.
+
+    Severity: critical — explosive sensitivity means the model's outputs are
+    dominated by numerical noise rather than the underlying financial signal.
+    """
+
+    FAILURE_TYPE = "nan_inf"
+    DEFAULT_THRESHOLD = 100.0
+    _EPSILON = 1e-12
+
+    def __init__(self, threshold: float = DEFAULT_THRESHOLD) -> None:
+        self.threshold = threshold
+        self._base_inputs: dict | None = None
+        self._base_output: Any = None
+
+    def set_baseline(self, base_inputs: dict, base_output: Any) -> None:
+        """Store the unperturbed inputs and output for ratio computation."""
+        self._base_inputs = base_inputs
+        self._base_output = base_output
+
+    def check(self, inputs: dict, output: Any, iteration: int) -> Finding | None:
+        if self._base_inputs is None:
+            return None
+
+        input_delta = self._vector_norm(inputs) - self._vector_norm(self._base_inputs)
+        output_delta = self._array_norm(output) - self._array_norm(self._base_output)
+
+        ratio = abs(output_delta) / (abs(input_delta) + self._EPSILON)
+
+        if ratio <= self.threshold:
+            return None
+
+        return Finding(
+            failure_type=self.FAILURE_TYPE,
+            severity="critical",
+            message=(
+                f"Exploding gradient detected: output change / input change = {ratio:.1f}x "
+                f"(threshold = {self.threshold}x). Small input perturbations produce "
+                f"disproportionately large output swings, indicating numerical instability."
+            ),
+            iteration=iteration,
+        )
+
+    @staticmethod
+    def _vector_norm(inputs: dict) -> float:
+        """Flatten all numeric values in inputs dict to a single L2 norm."""
+        sum_sq = 0.0
+        for v in inputs.values():
+            if isinstance(v, np.ndarray):
+                n = float(np.linalg.norm(v.ravel()))
+                sum_sq += n * n
+            else:
+                try:
+                    f = float(v)
+                    sum_sq += f * f
+                except (TypeError, ValueError):
+                    pass
+        return math.sqrt(sum_sq)
+
+    @staticmethod
+    def _array_norm(output: Any) -> float:
+        """Return L2 norm of output (scalar or array)."""
+        if isinstance(output, np.ndarray):
+            return float(np.linalg.norm(output.ravel()))
+        try:
+            return abs(float(output))
+        except (TypeError, ValueError):
+            return 0.0
