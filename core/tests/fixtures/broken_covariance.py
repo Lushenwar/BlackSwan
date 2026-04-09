@@ -9,21 +9,25 @@ import numpy as np
 
 
 def calculate_portfolio_var(
-    weights: np.ndarray,
-    vol: np.ndarray,
-    correlation_shift: float = 0.0,
+    weights: np.ndarray = np.array([0.3, 0.3, 0.4]),
+    vol: np.ndarray = np.array([0.15, 0.20, 0.10]),
+    correlation: float = 0.0,
 ) -> np.ndarray:
     """
     Compute portfolio covariance matrix under a perturbed correlation regime.
 
     Returns the covariance matrix directly so detectors can inspect it.
-    Fragile: when correlation_shift pushes pairwise correlations above 1.0,
-    the matrix becomes non-PSD.
+    Fragile: when the correlation additive shift pushes pairwise correlations
+    above 1.0 (base 0.8 + shift), the matrix loses positive semi-definiteness.
+
+    Parameter `correlation` is named to match the 'correlation' perturbation
+    target in correlation_breakdown.yaml and liquidity_crash.yaml so the
+    StressRunner scenario applies the perturbation correctly.
     """
     n = len(vol)
 
     # Perturbed correlation matrix — uniform pairwise correlation
-    corr_val = 0.8 + correlation_shift
+    corr_val = 0.8 + correlation
     corr_matrix = np.full((n, n), corr_val)
     np.fill_diagonal(corr_matrix, 1.0)
 

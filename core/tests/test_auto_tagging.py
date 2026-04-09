@@ -245,7 +245,7 @@ class TestRunnerIntegration:
 
         weights = np.array([0.4, 0.3, 0.3])
         vol = np.array([0.2, 0.3, 0.25])
-        output = calculate_portfolio_var(weights, vol, correlation_shift=0.35)
+        output = calculate_portfolio_var(weights, vol, correlation=0.35)
 
         suite = AutoTagger(BROKEN_COV).detector_suite()
         psd = next(d for d in suite if type(d).__name__ == _PSD)

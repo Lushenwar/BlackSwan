@@ -226,8 +226,8 @@ class TestEndToEndIntegration:
         weights = np.array([0.4, 0.3, 0.3])
         vol = np.array([0.2, 0.3, 0.25])
 
-        # correlation_shift=0.35 → pairwise corr = 0.8+0.35=1.15 > 1 → non-PSD
-        output = calculate_portfolio_var(weights, vol, correlation_shift=0.35)
+        # correlation=0.35 → pairwise corr = 0.8+0.35=1.15 > 1 → non-PSD
+        output = calculate_portfolio_var(weights, vol, correlation=0.35)
 
         detector = MatrixPSDDetector()
         finding = detector.check(inputs={}, output=output, iteration=0)
@@ -243,12 +243,12 @@ class TestEndToEndIntegration:
         assert "cov_matrix" in resolved_text
 
     def test_clean_inputs_produce_no_finding(self):
-        """correlation_shift=0.0 → PSD matrix → detector silent → nothing to resolve."""
+        """correlation=0.0 → PSD matrix → detector silent → nothing to resolve."""
         from tests.fixtures.broken_covariance import calculate_portfolio_var
 
         weights = np.array([0.4, 0.3, 0.3])
         vol = np.array([0.2, 0.3, 0.25])
-        output = calculate_portfolio_var(weights, vol, correlation_shift=0.0)
+        output = calculate_portfolio_var(weights, vol, correlation=0.0)
 
         finding = MatrixPSDDetector().check(inputs={}, output=output, iteration=0)
         assert finding is None

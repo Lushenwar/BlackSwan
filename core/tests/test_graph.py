@@ -65,8 +65,8 @@ class TestNodeTypes:
     def test_vol_is_root_input(self):
         assert self.node_map["vol"].node_type == "root_input"
 
-    def test_correlation_shift_is_root_input(self):
-        assert self.node_map["correlation_shift"].node_type == "root_input"
+    def test_correlation_is_root_input(self):
+        assert self.node_map["correlation"].node_type == "root_input"
 
     def test_corr_val_is_intermediate(self):
         assert self.node_map["corr_val"].node_type == "intermediate"
@@ -168,8 +168,8 @@ class TestEdges:
         self.graph = _build(BROKEN_COV)
         self.pairs = {(e.source, e.target) for e in self.graph.edges}
 
-    def test_correlation_shift_flows_to_corr_val(self):
-        assert ("correlation_shift", "corr_val") in self.pairs
+    def test_correlation_flows_to_corr_val(self):
+        assert ("correlation", "corr_val") in self.pairs
 
     def test_vol_flows_to_n(self):
         # n = len(vol)
