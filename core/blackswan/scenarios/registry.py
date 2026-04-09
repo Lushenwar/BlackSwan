@@ -18,6 +18,7 @@ from typing import Any
 import yaml
 
 from ..engine.perturbation import Perturbation, apply_perturbations
+from ..engine.validator import PlausibilityConstraint, PlausibilityValidator
 
 PRESETS_DIR = Path(__file__).parent / "presets"
 
@@ -48,6 +49,7 @@ class Scenario:
     perturbations: list[Perturbation]
     default_iterations: int
     default_seed: int
+    global_constraints: list[PlausibilityConstraint] = field(default_factory=list)
 
     @property
     def iterations(self) -> int:
@@ -57,6 +59,10 @@ class Scenario:
     def apply(self, inputs: dict, rng: Any) -> dict:
         """StressRunner protocol: return perturbed copy of inputs for one iteration."""
         return apply_perturbations(inputs, self.perturbations, rng)
+
+    def make_validator(self) -> PlausibilityValidator:
+        """Return a PlausibilityValidator built from this scenario's global_constraints."""
+        return PlausibilityValidator(self.global_constraints)
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +135,17 @@ def _parse_scenario(data: dict) -> Scenario:
         _parse_perturbation(p, idx) for idx, p in enumerate(raw_perturbs)
     ]
 
+    raw_constraints = data.get("global_constraints", [])
+    global_constraints = []
+    for idx, c in enumerate(raw_constraints):
+        if not isinstance(c, dict) or "target" not in c:
+            raise ValueError(f"global_constraints[{idx}] must have a 'target' key")
+        global_constraints.append(PlausibilityConstraint(
+            target=str(c["target"]),
+            min_value=float(c["min_value"]) if "min_value" in c else None,
+            max_value=float(c["max_value"]) if "max_value" in c else None,
+        ))
+
     return Scenario(
         name=str(data["name"]),
         display_name=str(data["display_name"]),
@@ -136,6 +153,7 @@ def _parse_scenario(data: dict) -> Scenario:
         perturbations=perturbations,
         default_iterations=int(defaults["iterations"]),
         default_seed=int(defaults["seed"]),
+        global_constraints=global_constraints,
     )
 
 
