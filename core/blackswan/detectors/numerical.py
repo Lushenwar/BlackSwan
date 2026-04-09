@@ -3,7 +3,7 @@ Detectors for general numerical failures: NaN, Inf, and division instability.
 """
 
 import math
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 
@@ -276,3 +276,36 @@ class RegimeShiftDetector(FailureDetector):
             return abs(float(output))
         except (TypeError, ValueError):
             return 0.0
+
+
+class LogicalInvariantDetector(FailureDetector):
+    """
+    User-defined assertion detector.
+
+    Supply any callable assertion(inputs: dict, output: Any) -> bool.
+    Fires (returns Finding) when assertion returns False or raises any exception.
+    """
+
+    FAILURE_TYPE = "bounds_exceeded"
+
+    def __init__(self, assertion: Callable[[dict, Any], bool], description: str) -> None:
+        self._assertion = assertion
+        self._description = description
+
+    def check(self, inputs: dict, output: Any, iteration: int) -> Finding | None:
+        extra = ""
+        try:
+            passed = bool(self._assertion(inputs, output))
+        except Exception as exc:
+            passed = False
+            extra = f" (assertion raised: {exc})"
+
+        if passed:
+            return None
+
+        return Finding(
+            failure_type=self.FAILURE_TYPE,
+            severity="warning",
+            message=f"Logical invariant violated: {self._description}{extra}.",
+            iteration=iteration,
+        )

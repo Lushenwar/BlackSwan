@@ -11,7 +11,7 @@ import math
 import numpy as np
 import pytest
 
-from blackswan.detectors.numerical import ExplodingGradientDetector, RegimeShiftDetector
+from blackswan.detectors.numerical import ExplodingGradientDetector, LogicalInvariantDetector, RegimeShiftDetector
 
 
 # ---------------------------------------------------------------------------
@@ -223,3 +223,85 @@ class TestRegimeShiftDetector:
         # With a strict threshold (2.0), the outlier fires; with lenient (5.0), it may not
         assert finding_low is not None
         assert finding_high is None
+
+
+# ---------------------------------------------------------------------------
+# TestLogicalInvariantDetector
+# ---------------------------------------------------------------------------
+
+class TestLogicalInvariantDetector:
+
+    def test_invariant_satisfied_silent(self):
+        """Assertion passes (output >= 0) → None."""
+        det = LogicalInvariantDetector(lambda i, o: float(o) >= 0, "output must be non-negative")
+        result = det.check({}, np.array([0.5]), iteration=0)
+        assert result is None
+
+    def test_invariant_violated_fires(self):
+        """Assertion fails (output < 0) → Finding returned."""
+        det = LogicalInvariantDetector(lambda i, o: float(o) >= 0, "output must be non-negative")
+        result = det.check({}, np.array([-0.1]), iteration=1)
+        assert result is not None
+
+    def test_failure_type_is_bounds_exceeded(self):
+        """Fired finding carries failure_type='bounds_exceeded'."""
+        det = LogicalInvariantDetector(lambda i, o: float(o) >= 0, "non-negative check")
+        finding = det.check({}, np.array([-0.1]), iteration=0)
+        assert finding is not None
+        assert finding.failure_type == "bounds_exceeded"
+
+    def test_severity_is_warning(self):
+        """Fired finding carries severity='warning'."""
+        det = LogicalInvariantDetector(lambda i, o: float(o) >= 0, "non-negative check")
+        finding = det.check({}, np.array([-0.1]), iteration=0)
+        assert finding is not None
+        assert finding.severity == "warning"
+
+    def test_description_in_message(self):
+        """The description string appears in the finding message."""
+        description = "weights must sum to one"
+        det = LogicalInvariantDetector(lambda i, o: False, description)
+        finding = det.check({}, 0.0, iteration=0)
+        assert finding is not None
+        assert description in finding.message
+
+    def test_exception_in_assertion_treated_as_violation(self):
+        """Assertion that raises RuntimeError → Finding returned (not None)."""
+        def bad_assertion(inputs, output):
+            raise RuntimeError("something went wrong")
+
+        det = LogicalInvariantDetector(bad_assertion, "must not raise")
+        result = det.check({}, 1.0, iteration=5)
+        assert result is not None
+
+    def test_exception_message_in_finding(self):
+        """When assertion raises, the exception text appears in the finding message."""
+        def bad_assertion(inputs, output):
+            raise RuntimeError("singular matrix")
+
+        det = LogicalInvariantDetector(bad_assertion, "stability check")
+        finding = det.check({}, 1.0, iteration=0)
+        assert finding is not None
+        assert "singular matrix" in finding.message
+
+    def test_inputs_available_to_assertion(self):
+        """Assertion can inspect inputs dict; fires when weight=-0.5, silent when weight=0.5."""
+        det = LogicalInvariantDetector(lambda i, o: i.get("weight", 0) >= 0, "weight non-negative")
+        # Should fire when weight is negative
+        finding_neg = det.check({"weight": -0.5}, 1.0, iteration=0)
+        assert finding_neg is not None
+        # Should be silent when weight is non-negative
+        finding_pos = det.check({"weight": 0.5}, 1.0, iteration=1)
+        assert finding_pos is None
+
+    def test_truthy_return_values_pass(self):
+        """Assertion returning 1 (truthy) → treated as passed → None."""
+        det = LogicalInvariantDetector(lambda i, o: 1, "always truthy")
+        result = det.check({}, 0.0, iteration=0)
+        assert result is None
+
+    def test_falsy_return_values_fire(self):
+        """Assertion returning 0 (falsy) → treated as failed → Finding."""
+        det = LogicalInvariantDetector(lambda i, o: 0, "always falsy")
+        finding = det.check({}, 0.0, iteration=0)
+        assert finding is not None
