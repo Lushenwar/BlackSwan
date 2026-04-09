@@ -35,7 +35,7 @@ The core engine must be installed in the Python environment you use to run your 
 
 Open your terminal and activate your project's virtual environment, then run:
 ```bash
-pip install blackswan-core
+pip install blackswan
 ```
 
 ### Step 2: Install the VS Code Extension
