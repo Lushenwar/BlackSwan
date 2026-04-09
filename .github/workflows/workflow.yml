@@ -14,7 +14,6 @@ jobs:
     permissions:
       id-token: write  # MANDATORY for trusted publishing
       contents: read
-      packages: write
 
     steps:
     - uses: actions/checkout@v4
@@ -36,10 +35,3 @@ jobs:
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
         packages-dir: core/dist/
-
-    - name: Publish package distributions to GitHub Packages
-      run: |
-        python -m twine upload --repository-url https://pypi.pkg.github.com/${{ github.repository_owner }}/${{ github.event.repository.name }} core/dist/*
-      env:
-        TWINE_USERNAME: ${{ github.actor }}
-        TWINE_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
