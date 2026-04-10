@@ -382,3 +382,70 @@ class TestFunctionFlag:
         )
         data = json.loads(result.stderr)
         assert data["status"] == "error"
+
+
+# ---------------------------------------------------------------------------
+# --adversarial flag
+# ---------------------------------------------------------------------------
+
+class TestAdversarialFlag:
+    def test_adversarial_flag_accepted(self):
+        result = _run(
+            "test", str(FIXTURE_DIR / "broken_covariance.py"),
+            "--scenario", "liquidity_crash",
+            "--adversarial",
+            "--iterations", "3",
+            "--population", "10",
+        )
+        assert result.returncode in (0, 1)
+
+    def test_adversarial_output_is_valid_json(self):
+        result = _run(
+            "test", str(FIXTURE_DIR / "broken_covariance.py"),
+            "--scenario", "liquidity_crash",
+            "--adversarial",
+            "--iterations", "3",
+            "--population", "10",
+        )
+        data = json.loads(result.stdout)  # must not raise
+        assert "shatter_points" in data
+
+    def test_adversarial_finds_failures(self):
+        result = _run(
+            "test", str(FIXTURE_DIR / "broken_covariance.py"),
+            "--scenario", "liquidity_crash",
+            "--adversarial",
+            "--iterations", "25",
+            "--population", "20",
+            "--seed", "42",
+        )
+        data = json.loads(result.stdout)
+        assert data["status"] == "failures_detected"
+        psd_failures = [
+            sp for sp in data["shatter_points"]
+            if sp["failure_type"] == "non_psd_matrix"
+        ]
+        assert len(psd_failures) >= 1
+
+    def test_population_flag_accepted(self):
+        result = _run(
+            "test", str(FIXTURE_DIR / "broken_covariance.py"),
+            "--scenario", "liquidity_crash",
+            "--adversarial",
+            "--population", "5",
+            "--iterations", "2",
+        )
+        assert result.returncode in (0, 1)
+
+    def test_adversarial_same_seed_reproducible(self):
+        args = [
+            "test", str(FIXTURE_DIR / "broken_covariance.py"),
+            "--scenario", "liquidity_crash",
+            "--adversarial",
+            "--iterations", "5",
+            "--population", "10",
+            "--seed", "42",
+        ]
+        r1 = json.loads(_run(*args).stdout)
+        r2 = json.loads(_run(*args).stdout)
+        assert r1["summary"]["total_failures"] == r2["summary"]["total_failures"]

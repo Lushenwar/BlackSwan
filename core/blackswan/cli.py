@@ -117,6 +117,23 @@ def _build_parser() -> argparse.ArgumentParser:
         "--seed", type=int, default=None,
         help="RNG seed for reproducibility. Overrides the scenario's default.",
     )
+    test_p.add_argument(
+        "--adversarial",
+        action="store_true",
+        default=False,
+        help=(
+            "Use the Evolutionary (Genetic Algorithm) stress runner instead of "
+            "random Monte Carlo sampling. Finds shatter points faster by evolving "
+            "perturbation sets toward maximum failure severity. "
+            "--iterations controls the number of GA generations (default: 20)."
+        ),
+    )
+    test_p.add_argument(
+        "--population",
+        type=int,
+        default=100,
+        help="Population size per generation when using --adversarial (default: 100).",
+    )
 
     return parser
 
@@ -170,13 +187,28 @@ def _cmd_test(args: argparse.Namespace) -> None:
 
     # Select detector suite automatically from AST analysis of the target file.
     detectors = AutoTagger(file_path).detector_suite()
-    runner = StressRunner(
-        fn=fn,
-        base_inputs=base_inputs,
-        scenario=_IterationOverride(scenario, iterations),
-        detectors=detectors,
-        seed=seed,
-    )
+    if getattr(args, "adversarial", False):
+        from .engine.adversarial import EvolutionaryStressRunner
+        n_generations = iterations  # --iterations is repurposed as generation count
+        population_size = getattr(args, "population", 100)
+        runner = EvolutionaryStressRunner(
+            fn=fn,
+            base_inputs=base_inputs,
+            scenario=_IterationOverride(scenario, n_generations),
+            detectors=detectors,
+            seed=seed,
+            n_generations=n_generations,
+            population_size=population_size,
+            elite_fraction=0.2,
+        )
+    else:
+        runner = StressRunner(
+            fn=fn,
+            base_inputs=base_inputs,
+            scenario=_IterationOverride(scenario, iterations),
+            detectors=detectors,
+            seed=seed,
+        )
     result = runner.run()
 
     # Resolve line numbers for every finding.
@@ -451,6 +483,10 @@ class _IterationOverride:
 
     def apply(self, inputs: dict, rng: Any) -> dict:
         return self._scenario.apply(inputs, rng)
+
+    def __getattr__(self, name: str) -> Any:
+        # Forward any attribute not explicitly defined here to the wrapped scenario.
+        return getattr(self._scenario, name)
 
 
 def _error_exit(message: str, code: int) -> None:
