@@ -57,16 +57,26 @@ class TestComputeFitness:
         two = compute_fitness([self._finding(), self._finding()])
         assert two > one
 
-    def test_non_psd_bonus_applied(self):
+    def test_non_psd_gets_type_multiplier(self):
+        # non_psd_matrix multiplier = 1.5 (meaningful, but below nan_inf = 2.0 by design)
+        # nan_inf is more catastrophic — unrecoverable vs repairable
         non_psd_score = compute_fitness([self._finding(failure_type="non_psd_matrix", severity="critical")])
-        nan_inf_score = compute_fitness([self._finding(failure_type="nan_inf", severity="critical")])
-        # non_psd_matrix has a bonus of 1.5 vs no bonus (1.0) for nan_inf
-        assert non_psd_score >= nan_inf_score
+        info_score = compute_fitness([self._finding(failure_type="non_psd_matrix", severity="info")])
+        # non_psd critical must score higher than non_psd info
+        assert non_psd_score > info_score
+        # non_psd must score above zero
+        assert non_psd_score > 0.0
+
+    def test_nan_inf_highest_type_multiplier(self):
+        # nan_inf has the highest type multiplier (2.0) — catastrophic, unrecoverable
+        nan_inf_critical = compute_fitness([self._finding(failure_type="nan_inf", severity="critical")])
+        non_psd_critical = compute_fitness([self._finding(failure_type="non_psd_matrix", severity="critical")])
+        assert nan_inf_critical > non_psd_critical
 
     def test_ill_conditioned_bonus_applied(self):
         ill_cond_score = compute_fitness([self._finding(failure_type="ill_conditioned_matrix", severity="critical")])
-        plain_warning_score = compute_fitness([self._finding(failure_type="nan_inf", severity="warning")])
-        # ill_conditioned_matrix: 3.0 * 1.2 = 3.6 vs nan_inf warning: 1.5 * 1.0 = 1.5
+        plain_warning_score = compute_fitness([self._finding(failure_type="bounds_exceeded", severity="warning")])
+        # ill_conditioned critical must outscore a bounds_exceeded warning
         assert ill_cond_score > plain_warning_score
 
 

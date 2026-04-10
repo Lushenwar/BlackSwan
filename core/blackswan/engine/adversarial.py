@@ -1,18 +1,22 @@
 """
 Evolutionary (Genetic Algorithm) stress runner for BlackSwan.
 
-Replaces random Monte Carlo sampling with a population-based search that
-evolves perturbation sets toward maximum failure severity.
+Phase 3 — Adversarial Rigor:
+  - ImportanceSampler biases draws toward regions where failures have been seen.
+  - Severity-weighted fitness: P(failure) × Impact × Confidence, not binary pass/fail.
+  - ConstraintRepairPipeline ensures every mutated/crossed individual is valid.
+  - HardnessAdaptor scales perturbation ranges when the GA stalls.
 
-Public API (built across tasks B1–B3):
-    Individual                — one candidate perturbation parameter set
-    compute_fitness(findings) — score a list of findings (higher = worse)
-    crossover(p1, p2, rng)   — produce a child by mixing two parents
-    mutate(ind, rng, scale)  — apply Gaussian noise to individual's params
-    EvolutionaryStressRunner  — drop-in replacement for StressRunner (added B2)
+Public API:
+    Individual                     — one candidate perturbation parameter set
+    compute_fitness(findings, ...)  — severity/magnitude/confidence-weighted score
+    crossover(p1, p2, rng)         — 50/50 per-param child from two parents
+    mutate(ind, rng, scale)        — Gaussian noise → repaired new Individual
+    EvolutionaryStressRunner       — drop-in replacement for StressRunner
 """
 
 import copy
+import sys
 import time
 import traceback as tb
 from dataclasses import dataclass, field
@@ -22,7 +26,16 @@ import numpy as np
 
 from ..detectors.base import FailureDetector, Finding
 from ..engine.perturbation import Perturbation, apply_perturbations
+from .importance import ImportanceSampler
 from .runner import RunResult
+from .shrink import ConstraintRepairPipeline
+
+
+# ---------------------------------------------------------------------------
+# Shared repair pipeline (module-level singleton — stateless)
+# ---------------------------------------------------------------------------
+
+_REPAIR = ConstraintRepairPipeline()
 
 
 @dataclass
@@ -36,63 +49,117 @@ class Individual:
     fitness: Score after evaluation. Higher = caused more severe failure.
              Starts at 0.0; set by the runner after evaluation.
     """
-
     params: dict[str, float]
     fitness: float = 0.0
 
 
-_SEVERITY_WEIGHT = {"critical": 3.0, "warning": 1.5, "info": 0.5}
-_TYPE_BONUS = {"non_psd_matrix": 1.5, "ill_conditioned_matrix": 1.2}
+# ---------------------------------------------------------------------------
+# Severity-weighted fitness (Phase 3.2)
+# ---------------------------------------------------------------------------
+
+_SEVERITY_WEIGHT: dict[str, float] = {
+    "critical": 3.0,
+    "warning":  1.5,
+    "info":     0.5,
+}
+
+_TYPE_MULTIPLIER: dict[str, float] = {
+    "non_psd_matrix":          1.5,
+    "ill_conditioned_matrix":  1.2,
+    "nan_inf":                 2.0,
+    "bounds_exceeded":         1.0,
+    "division_instability":    1.3,
+    "exploding_gradient":      1.4,
+    "regime_shift":            1.1,
+    "logical_invariant":       1.0,
+}
 
 
-def compute_fitness(findings: list[Finding]) -> float:
+def _magnitude_score(finding: Finding) -> float:
     """
-    Score a list of findings. Higher = more severe failures.
+    Extract a continuous magnitude signal from the finding message where possible.
+    Falls back to 1.0 (neutral) when magnitude is not available.
+    """
+    msg = finding.message.lower()
+    # Eigenvalue magnitude for PSD failures
+    if "eigenvalue" in msg or "non_psd" in finding.failure_type:
+        try:
+            # Pattern: "smallest eigenvalue: -0.0034"
+            for part in msg.split():
+                v = float(part.rstrip(".,;"))
+                if v < 0:
+                    return min(abs(v) * 100 + 1.0, 5.0)
+        except (ValueError, IndexError):
+            pass
+    # Condition number for ill-conditioned
+    if "condition" in msg:
+        try:
+            for part in msg.split():
+                v = float(part.rstrip(".,;"))
+                if v > 1e10:
+                    import math
+                    return min(math.log10(v) / 12.0, 3.0)
+        except (ValueError, ImportError):
+            pass
+    return 1.0
+
+
+def compute_fitness(
+    findings: list[Finding],
+    slow_path_confirmed: set[int] | None = None,
+) -> float:
+    """
+    Score a list of findings with severity, type multiplier, magnitude, and confidence.
+
+    fitness = sum(severity_weight × type_multiplier × magnitude × confidence)
+
+    confidence = 1.0 if the iteration was confirmed by Slow-Path replay,
+                 0.5 for Fast-Path-only findings (not yet verified).
+
     Returns 0.0 for empty list.
-    Each finding contributes: severity_weight * type_bonus (1.0 if no bonus).
     """
     if not findings:
         return 0.0
-
+    confirmed = slow_path_confirmed or set()
     total = 0.0
-    for finding in findings:
-        weight = _SEVERITY_WEIGHT.get(finding.severity, 0.0)
-        bonus = _TYPE_BONUS.get(finding.failure_type, 1.0)
-        total += weight * bonus
-
+    for f in findings:
+        weight = _SEVERITY_WEIGHT.get(f.severity, 0.5)
+        mult   = _TYPE_MULTIPLIER.get(f.failure_type, 1.0)
+        mag    = _magnitude_score(f)
+        conf   = 1.0 if f.iteration in confirmed else 0.5
+        total += weight * mult * mag * conf
     return total
 
 
 def crossover(parent1: Individual, parent2: Individual, rng: np.random.Generator) -> Individual:
     """
     Produce a child by randomly choosing each param from one parent (50/50 coin flip).
+    Child is repaired to satisfy domain constraints before being returned.
     Child fitness starts at 0.0 (not yet evaluated).
     Original parents are not modified.
     Keys come from parent1 — both parents must have same keys.
     """
     child_params: dict[str, float] = {}
     for key in parent1.params:
-        if rng.random() < 0.5:
-            child_params[key] = parent1.params[key]
-        else:
-            child_params[key] = parent2.params[key]
-    return Individual(params=child_params, fitness=0.0)
+        child_params[key] = parent1.params[key] if rng.random() < 0.5 else parent2.params[key]
+    repaired = _REPAIR.repair(child_params).params
+    return Individual(params=repaired, fitness=0.0)
 
 
 def mutate(individual: Individual, rng: np.random.Generator, noise_scale: float = 0.1) -> Individual:
     """
-    Apply Gaussian noise to every param value. Returns a NEW Individual.
+    Apply Gaussian noise to every param value. Returns a NEW repaired Individual.
     Original is never modified.
     noise_scale is std dev of noise relative to the absolute value of each param:
         new_val = val + normal(0, noise_scale * max(abs(val), 1e-6))
-    Child fitness starts at 0.0.
+    Result is run through ConstraintRepairPipeline before being returned.
     """
     new_params: dict[str, float] = {}
     for key, val in individual.params.items():
         std = noise_scale * max(abs(val), 1e-6)
-        noise = rng.normal(0.0, std)
-        new_params[key] = val + noise
-    return Individual(params=new_params, fitness=0.0)
+        new_params[key] = val + float(rng.normal(0.0, std))
+    repaired = _REPAIR.repair(new_params).params
+    return Individual(params=repaired, fitness=0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -297,9 +364,11 @@ class EvolutionaryStressRunner:
         n_elites = max(1, int(self.population_size * self.elite_fraction))
         total_iterations = 0
 
+        # --- ImportanceSampler (Phase 3.1) ---
+        sampler = ImportanceSampler(param_ranges, bandwidth=0.2, tail_fraction=0.7)
+
         # --- GA loop ---
         for generation in range(self.n_generations):
-            # Evaluate each individual
             for idx, individual in enumerate(population):
                 iteration_id = generation * self.population_size + idx
                 perturbed = _apply_individual(
@@ -310,23 +379,35 @@ class EvolutionaryStressRunner:
                 all_findings.extend(findings)
                 total_iterations += 1
 
+                # Feed failures back into the importance sampler
+                if findings:
+                    sampler.record_failure(perturbed)
+
             # Sort descending by fitness, select elites
             population.sort(key=lambda ind: ind.fitness, reverse=True)
             elites = [copy.deepcopy(ind) for ind in population[:n_elites]]
 
-            # Update hardness adaptor based on best elite fitness
+            # Update hardness adaptor
             best_gen_fitness = max((ind.fitness for ind in population[:n_elites]), default=0.0)
             self._hardness.update(best_gen_fitness)
             scale = self._hardness.range_scale()
 
-            # Build next generation
+            # Build next generation: elites + crossover/mutate children
+            # New members seeded from ImportanceSampler when it has enough data
             next_pop: list[Individual] = list(elites)
             while len(next_pop) < self.population_size:
-                # Pick two parents from elites (or full population if elites insufficient)
                 parent_pool = elites if len(elites) >= 2 else population
                 i1, i2 = rng.choice(len(parent_pool), size=2, replace=False)
                 child = crossover(parent_pool[i1], parent_pool[i2], rng)
                 child = mutate(child, rng, self.noise_scale * scale)
+
+                # Occasionally inject an importance-sampled individual
+                # to re-seed exploration near known failure regions
+                if sampler.failure_count >= 5 and rng.random() < 0.15:
+                    sampled = sampler.sample(rng)
+                    repaired = _REPAIR.repair(sampled).params
+                    child = Individual(params=repaired, fitness=0.0)
+
                 next_pop.append(child)
 
             population = next_pop
@@ -334,10 +415,7 @@ class EvolutionaryStressRunner:
         runtime_ms = int((time.monotonic() - start) * 1000)
 
         from .cluster import cluster_findings
-        buckets = cluster_findings(
-            findings=all_findings,
-            total_iterations=total_iterations,
-        )
+        buckets = cluster_findings(findings=all_findings, total_iterations=total_iterations)
 
         return RunResult(
             iterations_completed=total_iterations,
