@@ -6,7 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
-## [0.2.0] — 2026-04-09
+## [0.1.2] — 2026-04-09
 
 ### Added
 
@@ -24,7 +24,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - `RunResult.iterations_completed` now counts only *executed* iterations (validator-skipped iterations excluded).
-- Version bumped 0.1.1 → 0.2.0 to reflect the new engine capabilities.
+- Version bumped 0.1.1 → 0.1.2 to reflect the new engine capabilities.
 - `pyproject.toml`: added `Documentation` and `Changelog` URLs; added `genetic-algorithm`, `adversarial-testing`, `portfolio-risk` keywords; added `Topic :: Software Development :: Testing` and `Typing :: Typed` classifiers.
 
 ### Fixed
@@ -56,6 +56,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Versioned JSON contract (`contract/schema.json`) validated on every response.
 - VS Code extension with CodeLens, Diagnostics, HoverProvider, progress bar, and DAG webview panel.
 
-[0.2.0]: https://github.com/Lushenwar/BlackSwan/compare/v0.1.1...v0.2.0
+[0.1.2]: https://github.com/Lushenwar/BlackSwan/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/Lushenwar/BlackSwan/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Lushenwar/BlackSwan/releases/tag/v0.1.0
