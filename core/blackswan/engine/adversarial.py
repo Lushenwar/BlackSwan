@@ -188,6 +188,37 @@ def _apply_individual(
 
 
 # ---------------------------------------------------------------------------
+# HardnessAdaptor
+# ---------------------------------------------------------------------------
+
+class HardnessAdaptor:
+    """
+    Adaptive intensity controller for EvolutionaryStressRunner.
+
+    When the GA makes no progress (best fitness == 0.0 in a generation),
+    hardness increases by `step`, capped at `max_hardness`.
+    `range_scale()` returns a multiplier [1.0, 2.0] used to widen
+    perturbation parameter ranges so the engine escapes flat search regions.
+
+    Formula: range_scale = 1.0 + hardness
+    """
+
+    def __init__(self, step: float = 0.1, max_hardness: float = 1.0) -> None:
+        self._step = step
+        self._max = max_hardness
+        self.hardness: float = 0.0
+
+    def update(self, best_fitness: float) -> None:
+        """Increase hardness when best_fitness == 0.0 (no failure found this generation)."""
+        if best_fitness == 0.0:
+            self.hardness = min(self.hardness + self._step, self._max)
+
+    def range_scale(self) -> float:
+        """Multiplier to apply to param ranges. Always >= 1.0."""
+        return 1.0 + self.hardness
+
+
+# ---------------------------------------------------------------------------
 # EvolutionaryStressRunner
 # ---------------------------------------------------------------------------
 
@@ -219,6 +250,7 @@ class EvolutionaryStressRunner:
         self.population_size = population_size
         self.elite_fraction = elite_fraction
         self.noise_scale = noise_scale
+        self._hardness = HardnessAdaptor(step=0.05, max_hardness=1.0)
 
     def run(self) -> RunResult:
         """
@@ -282,6 +314,11 @@ class EvolutionaryStressRunner:
             population.sort(key=lambda ind: ind.fitness, reverse=True)
             elites = [copy.deepcopy(ind) for ind in population[:n_elites]]
 
+            # Update hardness adaptor based on best elite fitness
+            best_gen_fitness = max((ind.fitness for ind in population[:n_elites]), default=0.0)
+            self._hardness.update(best_gen_fitness)
+            scale = self._hardness.range_scale()
+
             # Build next generation
             next_pop: list[Individual] = list(elites)
             while len(next_pop) < self.population_size:
@@ -289,7 +326,7 @@ class EvolutionaryStressRunner:
                 parent_pool = elites if len(elites) >= 2 else population
                 i1, i2 = rng.choice(len(parent_pool), size=2, replace=False)
                 child = crossover(parent_pool[i1], parent_pool[i2], rng)
-                child = mutate(child, rng, self.noise_scale)
+                child = mutate(child, rng, self.noise_scale * scale)
                 next_pop.append(child)
 
             population = next_pop

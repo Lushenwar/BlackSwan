@@ -8,6 +8,7 @@ from blackswan.detectors.matrix import MatrixPSDDetector
 from blackswan.engine.adversarial import (
     Individual,
     EvolutionaryStressRunner,
+    HardnessAdaptor,
     compute_fitness,
     crossover,
     mutate,
@@ -208,3 +209,45 @@ class TestEvolutionaryStressRunner:
         psd = [f for f in result.findings if f.failure_type == "non_psd_matrix"]
         assert len(psd) > 0
         assert result.iterations_completed <= 500
+
+
+class TestHardnessAdaptor:
+    def test_initial_hardness_is_zero(self):
+        h = HardnessAdaptor()
+        assert h.hardness == 0.0
+
+    def test_no_progress_increases_hardness(self):
+        h = HardnessAdaptor(step=0.1)
+        h.update(0.0)
+        assert h.hardness == pytest.approx(0.1)
+
+    def test_progress_does_not_increase_hardness(self):
+        h = HardnessAdaptor(step=0.1)
+        h.update(0.0)
+        h.update(5.0)
+        assert h.hardness == pytest.approx(0.1)
+
+    def test_hardness_capped_at_max(self):
+        h = HardnessAdaptor(step=0.5, max_hardness=1.0)
+        for _ in range(10):
+            h.update(0.0)
+        assert h.hardness == pytest.approx(1.0)
+
+    def test_scale_at_zero_hardness_is_one(self):
+        h = HardnessAdaptor()
+        assert h.range_scale() == pytest.approx(1.0)
+
+    def test_scale_at_full_hardness_is_two(self):
+        h = HardnessAdaptor(step=0.5, max_hardness=1.0)
+        for _ in range(10):
+            h.update(0.0)
+        assert h.range_scale() == pytest.approx(2.0)
+
+    def test_scale_increases_monotonically(self):
+        h = HardnessAdaptor(step=0.1, max_hardness=1.0)
+        scales = []
+        for _ in range(10):
+            h.update(0.0)
+            scales.append(h.range_scale())
+        for i in range(1, len(scales)):
+            assert scales[i] >= scales[i - 1]
