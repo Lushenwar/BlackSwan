@@ -72,7 +72,13 @@ export class BlackSwanCodeLensProvider
     this._onDidChangeCodeLenses.event;
 
   provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
-    if (document.languageId !== "python") return [];
+    console.log(`[BlackSwan] provideCodeLenses called for: ${document.uri.fsPath}`);
+    console.log(`[BlackSwan] Language ID: ${document.languageId}`);
+
+    if (document.languageId !== "python") {
+      console.log(`[BlackSwan] Skipping: not a python file.`);
+      return [];
+    }
 
     const lines: string[] = [];
     for (let i = 0; i < document.lineCount; i++) {
@@ -80,6 +86,7 @@ export class BlackSwanCodeLensProvider
     }
 
     const targets = scanForTargets(lines);
+    console.log(`[BlackSwan] Found ${targets.length} targets in ${document.uri.fsPath}`);
 
     return targets.map((target) => {
       const range = new vscode.Range(target.line, 0, target.line, 0);

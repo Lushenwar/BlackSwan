@@ -4,7 +4,7 @@
   "title": "BlackSwan Stress Test Response",
   "description": "Schema for responses produced by blackswan-core. Every engine response must validate against this schema.",
   "type": "object",
-  "required": ["version", "status", "runtime_ms", "iterations_completed", "summary", "shatter_points", "scenario_card"],
+  "required": ["version", "status", "mode", "runtime_ms", "iterations_completed", "summary", "shatter_points", "scenario_card", "reproducibility_card", "budget"],
   "additionalProperties": false,
   "properties": {
     "version": {
@@ -17,6 +17,11 @@
       "enum": ["failures_detected", "no_failures", "error"],
       "description": "High-level result. 'no_failures' means all iterations completed with zero shatter points."
     },
+    "mode": {
+      "type": "string",
+      "enum": ["fast", "full", "adversarial"],
+      "description": "Execution mode used for this run."
+    },
     "runtime_ms": {
       "type": "integer",
       "minimum": 0,
@@ -25,7 +30,7 @@
     "iterations_completed": {
       "type": "integer",
       "minimum": 0,
-      "description": "Number of simulation iterations actually completed (may be less than requested if cancelled)."
+      "description": "Number of simulation iterations actually completed (may be less than requested if budget was hit)."
     },
     "summary": {
       "type": "object",
@@ -35,7 +40,7 @@
         "total_failures": {
           "type": "integer",
           "minimum": 0,
-          "description": "Total number of iterations in which at least one failure was detected."
+          "description": "Total number of failure occurrences across all root cause buckets."
         },
         "failure_rate": {
           "type": "number",
@@ -46,17 +51,17 @@
         "unique_failure_types": {
           "type": "integer",
           "minimum": 0,
-          "description": "Number of distinct failure_type values observed across all shatter points."
+          "description": "Number of distinct root cause buckets (unique failure modes)."
         }
       }
     },
     "shatter_points": {
       "type": "array",
-      "description": "Ordered list of detected failures, most severe first.",
+      "description": "Ordered list of root cause buckets, most frequent first.",
       "items": {
         "type": "object",
-        "required": ["id", "line", "column", "severity", "failure_type", "message", "frequency", "causal_chain", "fix_hint"],
-        "additionalProperties": false,
+        "required": ["id", "line", "column", "severity", "failure_type", "message", "frequency", "causal_chain", "fix_hint", "confidence"],
+        "additionalProperties": true,
         "properties": {
           "id": {
             "type": "string",
@@ -65,11 +70,11 @@
           },
           "line": {
             "type": ["integer", "null"],
-            "description": "1-indexed source line where the failure manifests. Null when attribution could not be resolved (Phase 1 limitation)."
+            "description": "1-indexed source line where the failure manifests. Null when attribution could not be resolved."
           },
           "column": {
             "type": ["integer", "null"],
-            "description": "0-indexed column offset within the line. Null in Phase 1 (column attribution not yet implemented)."
+            "description": "0-indexed column offset within the line. Null when column attribution is not available."
           },
           "severity": {
             "type": "string",
@@ -78,19 +83,23 @@
           },
           "failure_type": {
             "type": "string",
+            "description": "Machine-readable failure category. Maps to detector class.",
             "enum": [
               "nan_inf",
               "division_by_zero",
               "non_psd_matrix",
               "ill_conditioned_matrix",
-              "bounds_exceeded"
-            ],
-            "description": "Machine-readable failure category. Maps to detector class."
+              "bounds_exceeded",
+              "division_instability",
+              "exploding_gradient",
+              "regime_shift",
+              "logical_invariant"
+            ]
           },
           "message": {
             "type": "string",
             "minLength": 1,
-            "description": "Human-readable explanation. Must state: what failed, the observed value, and the threshold that was violated."
+            "description": "Human-readable explanation including frequency information."
           },
           "frequency": {
             "type": "string",
@@ -99,20 +108,14 @@
           },
           "causal_chain": {
             "type": "array",
-            "description": "Ordered list from root input to failure site. Empty in Phase 1 (full causal walk implemented in Phase 2).",
+            "description": "Ordered list from root input to failure site.",
             "items": {
               "type": "object",
               "required": ["line", "variable", "role"],
               "additionalProperties": false,
               "properties": {
-                "line": {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                "variable": {
-                  "type": "string",
-                  "minLength": 1
-                },
+                "line": { "type": "integer", "minimum": 1 },
+                "variable": { "type": "string", "minLength": 1 },
                 "role": {
                   "type": "string",
                   "enum": ["root_input", "intermediate", "failure_site"]
@@ -122,7 +125,25 @@
           },
           "fix_hint": {
             "type": "string",
-            "description": "Actionable suggestion for how to guard against this failure. Empty string in Phase 1."
+            "description": "Actionable suggestion for how to guard against this failure."
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low", "unverified"],
+            "description": "Confidence level of the attribution. 'unverified' in fast mode or adversarial mode."
+          },
+          "trigger_disclosure": {
+            "type": "object",
+            "description": "Exact threshold that caused a threshold-based detector to fire. Absent for exception-based findings.",
+            "required": ["detector_name", "observed_value", "threshold", "comparison", "explanation"],
+            "additionalProperties": false,
+            "properties": {
+              "detector_name": { "type": "string" },
+              "observed_value": { "type": ["number", "string"] },
+              "threshold": { "type": ["number", "string"] },
+              "comparison": { "type": "string", "enum": [">", "<", ">=", "<=", "==", "!="] },
+              "explanation": { "type": "string", "minLength": 1 }
+            }
           }
         }
       }
@@ -131,23 +152,63 @@
       "type": "object",
       "required": ["name", "parameters_applied", "seed", "reproducible"],
       "additionalProperties": false,
-      "description": "Captures exactly how the simulation was run so results can be reproduced.",
+      "description": "Captures the scenario configuration used for this run.",
       "properties": {
-        "name": {
-          "type": "string",
-          "minLength": 1
-        },
+        "name": { "type": "string", "minLength": 1 },
         "parameters_applied": {
           "type": "object",
-          "description": "Key-value map of all scenario parameters as actually applied (after any clamping/defaults)."
+          "description": "Key-value map of all scenario parameters as actually applied."
         },
-        "seed": {
-          "type": "integer",
-          "minimum": 0
-        },
+        "seed": { "type": "integer", "minimum": 0 },
         "reproducible": {
           "type": "boolean",
-          "description": "Must be true. If the engine cannot guarantee determinism, it must return an error instead."
+          "description": "True when the run is fully deterministic and can be replayed."
+        }
+      }
+    },
+    "reproducibility_card": {
+      "type": "object",
+      "description": "Full provenance record — everything needed to reproduce this exact run.",
+      "required": [
+        "blackswan_version", "python_version", "numpy_version", "platform",
+        "seed", "scenario_name", "scenario_hash", "mode",
+        "iterations_requested", "iterations_executed", "iterations_skipped",
+        "budget_exhausted", "budget_reason", "timestamp_utc",
+        "reproducible", "replay_command"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "blackswan_version": { "type": "string" },
+        "python_version": { "type": "string" },
+        "numpy_version": { "type": "string" },
+        "platform": { "type": "string" },
+        "seed": { "type": "integer" },
+        "scenario_name": { "type": "string" },
+        "scenario_hash": { "type": "string", "minLength": 12, "maxLength": 12 },
+        "mode": { "type": "string" },
+        "iterations_requested": { "type": "integer", "minimum": 0 },
+        "iterations_executed": { "type": "integer", "minimum": 0 },
+        "iterations_skipped": { "type": "integer", "minimum": 0 },
+        "budget_exhausted": { "type": "boolean" },
+        "budget_reason": { "type": ["string", "null"] },
+        "timestamp_utc": { "type": "string" },
+        "reproducible": { "type": "boolean" },
+        "replay_command": { "type": "string" }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "description": "Budget exhaustion status for this run.",
+      "required": ["exhausted", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "exhausted": {
+          "type": "boolean",
+          "description": "True when --max-runtime-sec or --max-iterations stopped the run early."
+        },
+        "reason": {
+          "type": ["string", "null"],
+          "description": "'max_runtime_sec' | 'max_iterations' | null"
         }
       }
     }

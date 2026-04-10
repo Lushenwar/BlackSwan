@@ -1,12 +1,36 @@
 {
   "name": "blackswan-vscode",
   "displayName": "BlackSwan",
-  "description": "Stress-test mathematical and financial logic in Python code.",
-  "version": "0.0.1",
+  "description": "Stress-test mathematical and financial logic in Python code. Finds the exact line where your model breaks under extreme conditions.",
+  "version": "0.3.0",
+  "publisher": "Lushenwar",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Lushenwar/BlackSwan"
+  },
+  "bugs": {
+    "url": "https://github.com/Lushenwar/BlackSwan/issues"
+  },
+  "categories": [
+    "Testing",
+    "Linters",
+    "Other"
+  ],
+  "keywords": [
+    "python",
+    "stress testing",
+    "financial",
+    "numerical",
+    "monte carlo",
+    "risk",
+    "quant"
+  ],
   "engines": {
     "vscode": "^1.85.0"
   },
-  "main": "./out/extension.js",
+  "main": "./out/src/extension.js",
   "activationEvents": [
     "onLanguage:python"
   ],
@@ -25,6 +49,22 @@
           "type": "string",
           "default": "",
           "description": "Path to the Python executable used to run the BlackSwan engine. Leave empty to use the Python extension's interpreter or the system default."
+        },
+        "blackswan.mode": {
+          "type": "string",
+          "enum": ["fast", "full"],
+          "enumDescriptions": [
+            "Fast mode: skips Slow-Path attribution replay. Runs faster but confidence is marked 'unverified'.",
+            "Full mode: runs the Two-Path engine with attribution replay. Slower but all findings have verified confidence levels."
+          ],
+          "default": "fast",
+          "description": "Execution mode for the BlackSwan engine. 'fast' is recommended for interactive use; 'full' for final audits."
+        },
+        "blackswan.maxRuntimeSec": {
+          "type": "number",
+          "minimum": 1,
+          "default": null,
+          "markdownDescription": "Hard time limit in seconds. The engine stops after this many seconds even if not all iterations have completed. Leave empty for no limit."
         }
       }
     }

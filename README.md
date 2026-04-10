@@ -84,6 +84,14 @@ Once installed, open any Python file and click **▶ Run BlackSwan** above a fun
 4. Watch the progress bar — failures appear as red squiggles with hover tooltips
 5. Open the **BlackSwan DAG** panel to explore the dependency graph with failure nodes highlighted
 
+**Settings** (`Ctrl+,` → search "BlackSwan"):
+
+| Setting | Default | Description |
+|---|---|---|
+| `blackswan.pythonPath` | _(auto)_ | Python executable path. Falls back to the Python extension's interpreter. |
+| `blackswan.mode` | `fast` | `fast` for responsive IDE feedback; `full` for verified attribution. |
+| `blackswan.maxRuntimeSec` | _(none)_ | Hard time cap in seconds. Engine stops early if exceeded. |
+
 ### CLI
 
 ```bash
@@ -96,8 +104,18 @@ python -m blackswan test models/risk.py --scenario vol_spike --function calculat
 # Override iteration count and seed
 python -m blackswan test models/risk.py --scenario correlation_breakdown --iterations 10000 --seed 123
 
+# Fast mode — skips attribution replay, findings marked 'unverified' (default in VS Code)
+python -m blackswan test models/risk.py --scenario liquidity_crash --mode fast
+
+# Full mode — Two-Path engine with Slow-Path attribution replay (highest confidence)
+python -m blackswan test models/risk.py --scenario liquidity_crash --mode full
+
 # Adversarial mode — genetic algorithm actively searches for worst-case inputs
 python -m blackswan test models/risk.py --scenario liquidity_crash --adversarial --population 200
+
+# Budget flags — stop early if a time or iteration limit is hit
+python -m blackswan test models/risk.py --scenario liquidity_crash --max-runtime-sec 30
+python -m blackswan test models/risk.py --scenario liquidity_crash --max-iterations 2000
 ```
 
 **Exit codes:** `0` = no failures, `1` = failures detected, `2` = engine error.
@@ -114,6 +132,35 @@ result = runner.run(calculate_portfolio_var, base_inputs={"weights": w, "vol": v
 
 for finding in result.findings:
     print(f"Line {finding.line}: {finding.message} ({finding.severity})")
+```
+
+---
+
+## Execution Modes
+
+| Mode | Speed | Attribution confidence | When to use |
+|---|---|---|---|
+| `fast` (default) | Fastest | `unverified` | Interactive IDE use — rapid feedback loop |
+| `full` | Slower | `high` / `medium` / `low` | Final audits, CI pipelines, reproducible reports |
+| `adversarial` | Slowest | `unverified` | Finding worst-case inputs via genetic search |
+
+Every run emits a **ReproducibilityCard** — a machine-readable provenance record with the exact BlackSwan version, Python version, NumPy version, scenario hash, seed, and a ready-to-paste replay command:
+
+```json
+"reproducibility_card": {
+  "blackswan_version": "0.3.0",
+  "python_version": "3.11.9",
+  "numpy_version": "1.26.4",
+  "platform": "linux",
+  "seed": 42,
+  "scenario_name": "liquidity_crash",
+  "scenario_hash": "a3f9c2e1d084",
+  "mode": "full",
+  "iterations_requested": 5000,
+  "iterations_executed": 5000,
+  "reproducible": true,
+  "replay_command": "python -m blackswan test models/risk.py --scenario liquidity_crash --seed 42 --mode full"
+}
 ```
 
 ---

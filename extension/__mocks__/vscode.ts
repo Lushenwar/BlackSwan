@@ -37,6 +37,14 @@ export const ProgressLocation = {
   Notification:   15,
 } as const;
 
+export const ViewColumn = {
+  Active:  -1,
+  Beside:  -2,
+  One:      1,
+  Two:      2,
+  Three:    3,
+} as const;
+
 // ---------------------------------------------------------------------------
 // Value classes — real lightweight implementations for field assertions.
 // ---------------------------------------------------------------------------
@@ -145,6 +153,40 @@ export class CodeAction {
   ) {}
 }
 
+export class MarkdownString {
+  public value: string;
+  public isTrusted?: boolean;
+  public supportHtml?: boolean;
+  public supportThemeIcons?: boolean;
+
+  constructor(value = "") {
+    this.value = value;
+  }
+
+  appendMarkdown(text: string): this {
+    this.value += text;
+    return this;
+  }
+
+  appendText(text: string): this {
+    // Escape markdown special characters — mirrors the real VS Code behaviour.
+    this.value += text.replace(/[\\`*_{}[\]()#+\-.!|]/g, "\\$&");
+    return this;
+  }
+
+  appendCodeblock(code: string, language = ""): this {
+    this.value += `\`\`\`${language}\n${code}\n\`\`\`\n`;
+    return this;
+  }
+}
+
+export class Hover {
+  constructor(
+    public readonly contents: MarkdownString | MarkdownString[],
+    public readonly range?: Range,
+  ) {}
+}
+
 export class CodeLens {
   public command?: {
     title: string;
@@ -196,6 +238,93 @@ export class EventEmitter<T = void> {
 
 // Convenience alias — VS Code's Event<T> type is just a function signature.
 export type Event<T> = (listener: (e: T) => unknown) => { dispose(): void };
+
+// ---------------------------------------------------------------------------
+// FakeWebviewPanel — returned by window.createWebviewPanel in tests.
+// Tests can inspect `messageHandlers` / `disposeHandlers` or call
+// `simulateMessage()` to drive the panel's onDidReceiveMessage callbacks.
+// ---------------------------------------------------------------------------
+
+export class FakeWebviewPanel {
+  /** Handlers registered via webview.onDidReceiveMessage — inspectable in tests. */
+  readonly messageHandlers: Array<(msg: unknown) => void> = [];
+  /** Handlers registered via panel.onDidDispose — inspectable in tests. */
+  readonly disposeHandlers: Array<() => void> = [];
+
+  webview = {
+    html: "",
+    postMessage: jest.fn().mockResolvedValue(true),
+    cspSource: "vscode-webview:",
+    asWebviewUri: jest.fn((uri: Uri) => uri),
+    // onDidReceiveMessage and onDidDispose are assigned in the constructor
+    // so they can close over `this`.
+    onDidReceiveMessage: jest.fn() as jest.MockedFunction<
+      (
+        handler: (msg: unknown) => void,
+        thisArg?: unknown,
+        disposables?: Array<{ dispose(): void }>,
+      ) => { dispose(): void }
+    >,
+  };
+
+  onDidDispose: jest.MockedFunction<
+    (
+      handler: () => void,
+      thisArg?: unknown,
+      disposables?: Array<{ dispose(): void }>,
+    ) => { dispose(): void }
+  > = jest.fn();
+
+  reveal = jest.fn();
+  dispose = jest.fn();
+
+  constructor(
+    public readonly viewType: string,
+    public title: string,
+  ) {
+    // Capture the instance so closures work correctly.
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const panel = this;
+
+    this.webview.onDidReceiveMessage = jest.fn(
+      (
+        handler: (msg: unknown) => void,
+        _thisArg?: unknown,
+        disposables?: Array<{ dispose(): void }>,
+      ) => {
+        panel.messageHandlers.push(handler);
+        const d = { dispose: jest.fn() };
+        if (disposables) disposables.push(d);
+        return d;
+      },
+    ) as typeof this.webview.onDidReceiveMessage;
+
+    this.onDidDispose = jest.fn(
+      (
+        handler: () => void,
+        _thisArg?: unknown,
+        disposables?: Array<{ dispose(): void }>,
+      ) => {
+        panel.disposeHandlers.push(handler);
+        const d = { dispose: jest.fn() };
+        if (disposables) disposables.push(d);
+        return d;
+      },
+    ) as typeof this.onDidDispose;
+
+    this.dispose = jest.fn(() => {
+      for (const h of panel.disposeHandlers) h();
+    });
+  }
+
+  /**
+   * Test helper: simulate a message posted from the webview to the extension.
+   * Calls all handlers registered via `webview.onDidReceiveMessage`.
+   */
+  simulateMessage(message: unknown): void {
+    for (const h of this.messageHandlers) h(message);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Fake CancellationToken returned by the default withProgress implementation.
@@ -255,6 +384,11 @@ export const window = {
   showWarningMessage:     jest.fn(),
   showErrorMessage:       jest.fn(),
   showQuickPick:          jest.fn(),
+
+  createWebviewPanel: jest.fn(
+    (viewType: string, title: string, _column: unknown, _options?: unknown) =>
+      new FakeWebviewPanel(viewType, title),
+  ),
 
   withProgress: jest.fn(async (
     _options: unknown,
@@ -328,4 +462,18 @@ export interface QuickPickItem {
   description?: string;
   detail?: string;
   picked?: boolean;
+}
+
+export interface HoverProvider {
+  provideHover(
+    document: TextDocument,
+    position: Position,
+  ): Hover | undefined | Promise<Hover | undefined>;
+}
+
+export interface TextDocumentShowOptions {
+  selection?: Range;
+  viewColumn?: number;
+  preserveFocus?: boolean;
+  preview?: boolean;
 }

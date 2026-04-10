@@ -28,7 +28,7 @@ import { BlackSwanResponse, ShatterPoint } from "../src/types";
 
 const TEST_URI = vscode.Uri.file("/workspace/model.py");
 
-/** Minimal valid shatter point with all optional fields populated. */
+/** Minimal valid shatter point with all required fields populated. */
 function makeShatterPoint(overrides: Partial<ShatterPoint> = {}): ShatterPoint {
   return {
     id: "sp_001",
@@ -44,6 +44,7 @@ function makeShatterPoint(overrides: Partial<ShatterPoint> = {}): ShatterPoint {
       { line: 82, variable: "cov_matrix",           role: "failure_site" },
     ],
     fix_hint: "Apply nearest-PSD correction (Higham 2002) after correlation perturbation",
+    confidence: "high",
     ...overrides,
   };
 }
@@ -56,6 +57,7 @@ function makeResponse(
   return {
     version: "1.0",
     status: "failures_detected",
+    mode: "full",
     runtime_ms: 3420,
     iterations_completed: 5000,
     summary: {
@@ -70,6 +72,25 @@ function makeResponse(
       seed: 42,
       reproducible: true,
     },
+    reproducibility_card: {
+      blackswan_version: "0.3.0",
+      python_version: "3.11.0",
+      numpy_version: "1.26.0",
+      platform: "linux",
+      seed: 42,
+      scenario_name: "liquidity_crash",
+      scenario_hash: "abc123def456",
+      mode: "full",
+      iterations_requested: 5000,
+      iterations_executed: 5000,
+      iterations_skipped: 0,
+      budget_exhausted: false,
+      budget_reason: null,
+      timestamp_utc: "2026-04-10T00:00:00Z",
+      reproducible: true,
+      replay_command: "python -m blackswan test model.py --scenario liquidity_crash --seed 42",
+    },
+    budget: { exhausted: false, reason: null },
     ...overrides,
   };
 }

@@ -36,20 +36,41 @@ function makeShatterPoint(overrides: Partial<ShatterPoint> = {}): ShatterPoint {
       { line: 47, variable: "adjusted_corr_matrix", role: "intermediate" },
       { line: 82, variable: "cov_matrix",           role: "failure_site" },
     ],
-    fix_hint: "Apply Higham 2002 correction",
+    fix_hint:   "Apply Higham 2002 correction",
+    confidence: "high",
     ...overrides,
   };
 }
 
-function makeResponse(shatterPoints: ShatterPoint[] = [makeShatterPoint()]) {
+function makeResponse(shatterPoints: ShatterPoint[] = [makeShatterPoint()]): import("../src/types").BlackSwanResponse {
   return {
     version:              "1.0",
-    status:               "failures_detected" as const,
+    status:               "failures_detected",
+    mode:                 "full",
     runtime_ms:           200,
     iterations_completed: 5000,
     summary: { total_failures: shatterPoints.length, failure_rate: 0.17, unique_failure_types: 1 },
     shatter_points: shatterPoints,
     scenario_card:  { name: "liquidity_crash", parameters_applied: {}, seed: 42, reproducible: true },
+    reproducibility_card: {
+      blackswan_version:    "0.3.0",
+      python_version:       "3.11.0",
+      numpy_version:        "1.26.0",
+      platform:             "linux",
+      seed:                 42,
+      scenario_name:        "liquidity_crash",
+      scenario_hash:        "abc123def456",
+      mode:                 "full",
+      iterations_requested: 5000,
+      iterations_executed:  5000,
+      iterations_skipped:   0,
+      budget_exhausted:     false,
+      budget_reason:        null,
+      timestamp_utc:        "2026-04-10T00:00:00Z",
+      reproducible:         true,
+      replay_command:       "python -m blackswan test model.py --scenario liquidity_crash --seed 42",
+    },
+    budget: { exhausted: false, reason: null },
   };
 }
 

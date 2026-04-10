@@ -19,6 +19,7 @@ import {
   BlackSwanResponse,
   BridgeOptions,
   CausalRole,
+  Confidence,
   EngineFrameworkError,
   EngineProtocolError,
   EngineRuntimeError,
@@ -32,10 +33,18 @@ const DEFAULT_PYTHON = process.platform === "win32" ? "python" : "python3";
 const VALID_STATUSES: ResponseStatus[] = ["failures_detected", "no_failures", "error"];
 const VALID_SEVERITIES: Severity[] = ["critical", "warning", "info"];
 const VALID_FAILURE_TYPES: FailureType[] = [
-  "nan_inf", "division_by_zero", "non_psd_matrix",
-  "ill_conditioned_matrix", "bounds_exceeded",
+  "nan_inf",
+  "division_by_zero",
+  "non_psd_matrix",
+  "ill_conditioned_matrix",
+  "bounds_exceeded",
+  "division_instability",
+  "exploding_gradient",
+  "regime_shift",
+  "logical_invariant",
 ];
 const VALID_ROLES: CausalRole[] = ["root_input", "intermediate", "failure_site"];
+const VALID_CONFIDENCE_LEVELS: Confidence[] = ["high", "medium", "low", "unverified"];
 
 /**
  * Validate raw parsed JSON against the BlackSwan response contract.
@@ -96,6 +105,15 @@ export function validateEngineResponse(data: unknown): BlackSwanResponse {
   }
   if (typeof card.reproducible !== "boolean") {
     throw new EngineProtocolError("Missing or invalid field: 'scenario_card.reproducible' (expected boolean)");
+  }
+
+  // New fields — validated when present but not required for backward compat
+  // with older engine versions that pre-date these fields.
+  if (r.budget !== undefined) {
+    _validateBudget(r.budget);
+  }
+  if (r.reproducibility_card !== undefined) {
+    _validateReproducibilityCard(r.reproducibility_card);
   }
 
   return data as BlackSwanResponse;
@@ -236,8 +254,18 @@ function _validateShatterPoint(sp: unknown, index: number): void {
   if (!Array.isArray(p.causal_chain)) throw new EngineProtocolError(`${ctx}.causal_chain is not an array`);
   if (typeof p.fix_hint !== "string") throw new EngineProtocolError(`${ctx}.fix_hint is not a string`);
 
-  for (let j = 0; j < p.causal_chain.length; j++) {
-    const link = p.causal_chain[j];
+  // confidence — required field (present in all engine responses >= v3 rewrite)
+  if (p.confidence !== undefined && !VALID_CONFIDENCE_LEVELS.includes(p.confidence as Confidence)) {
+    throw new EngineProtocolError(`${ctx}.confidence is invalid: ${JSON.stringify(p.confidence)}`);
+  }
+
+  // trigger_disclosure — optional; validate shape when present
+  if (p.trigger_disclosure !== undefined) {
+    _validateTriggerDisclosure(p.trigger_disclosure, ctx);
+  }
+
+  for (let j = 0; j < (p.causal_chain as unknown[]).length; j++) {
+    const link = (p.causal_chain as unknown[])[j];
     const lctx = `${ctx}.causal_chain[${j}]`;
     if (typeof link !== "object" || link === null) throw new EngineProtocolError(`${lctx} is not an object`);
     const l = link as Record<string, unknown>;
@@ -245,6 +273,51 @@ function _validateShatterPoint(sp: unknown, index: number): void {
     if (typeof l.variable !== "string") throw new EngineProtocolError(`${lctx}.variable is not a string`);
     if (!VALID_ROLES.includes(l.role as CausalRole)) throw new EngineProtocolError(`${lctx}.role is invalid: ${JSON.stringify(l.role)}`);
   }
+}
+
+function _validateTriggerDisclosure(td: unknown, parentCtx: string): void {
+  const ctx = `${parentCtx}.trigger_disclosure`;
+  if (typeof td !== "object" || td === null) {
+    throw new EngineProtocolError(`${ctx} is not an object`);
+  }
+  const d = td as Record<string, unknown>;
+  if (typeof d.detector_name !== "string") throw new EngineProtocolError(`${ctx}.detector_name is not a string`);
+  if (typeof d.explanation !== "string") throw new EngineProtocolError(`${ctx}.explanation is not a string`);
+  const validComparisons = [">", "<", ">=", "<=", "==", "!="];
+  if (!validComparisons.includes(d.comparison as string)) {
+    throw new EngineProtocolError(`${ctx}.comparison is invalid: ${JSON.stringify(d.comparison)}`);
+  }
+}
+
+function _validateBudget(budget: unknown): void {
+  if (typeof budget !== "object" || budget === null) {
+    throw new EngineProtocolError("'budget' is not an object");
+  }
+  const b = budget as Record<string, unknown>;
+  if (typeof b.exhausted !== "boolean") {
+    throw new EngineProtocolError("'budget.exhausted' is not a boolean");
+  }
+  if (b.reason !== null && typeof b.reason !== "string") {
+    throw new EngineProtocolError("'budget.reason' must be string or null");
+  }
+}
+
+function _validateReproducibilityCard(card: unknown): void {
+  if (typeof card !== "object" || card === null) {
+    throw new EngineProtocolError("'reproducibility_card' is not an object");
+  }
+  const c = card as Record<string, unknown>;
+  const stringFields = [
+    "blackswan_version", "python_version", "numpy_version", "platform",
+    "scenario_name", "scenario_hash", "mode", "timestamp_utc", "replay_command",
+  ];
+  for (const field of stringFields) {
+    if (typeof c[field] !== "string") {
+      throw new EngineProtocolError(`'reproducibility_card.${field}' is not a string`);
+    }
+  }
+  if (typeof c.seed !== "number") throw new EngineProtocolError("'reproducibility_card.seed' is not a number");
+  if (typeof c.reproducible !== "boolean") throw new EngineProtocolError("'reproducibility_card.reproducible' is not a boolean");
 }
 
 function _buildArgs(
@@ -265,6 +338,15 @@ function _buildArgs(
   }
   if (options.seed !== undefined) {
     args.push("--seed", String(options.seed));
+  }
+  if (options.mode) {
+    args.push("--mode", options.mode);
+  }
+  if (options.maxRuntimeSec !== undefined) {
+    args.push("--max-runtime-sec", String(options.maxRuntimeSec));
+  }
+  if (options.maxIterations !== undefined) {
+    args.push("--max-iterations", String(options.maxIterations));
   }
 
   return args;

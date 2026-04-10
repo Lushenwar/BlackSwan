@@ -32,6 +32,10 @@ const FAILURE_TYPE_LABELS: Record<FailureType, string> = {
   non_psd_matrix:         "Non-PSD matrix",
   ill_conditioned_matrix: "Ill-conditioned matrix",
   bounds_exceeded:        "Bounds exceeded",
+  division_instability:   "Division instability",
+  exploding_gradient:     "Exploding gradient",
+  regime_shift:           "Regime shift",
+  logical_invariant:      "Logical invariant violation",
 };
 
 /**

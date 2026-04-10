@@ -54,12 +54,20 @@ export class EngineProtocolError extends Error {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Domain types
+// ---------------------------------------------------------------------------
+
 export type FailureType =
   | "nan_inf"
   | "division_by_zero"
   | "non_psd_matrix"
   | "ill_conditioned_matrix"
-  | "bounds_exceeded";
+  | "bounds_exceeded"
+  | "division_instability"
+  | "exploding_gradient"
+  | "regime_shift"
+  | "logical_invariant";
 
 export type Severity = "critical" | "warning" | "info";
 
@@ -67,10 +75,31 @@ export type ResponseStatus = "failures_detected" | "no_failures" | "error";
 
 export type CausalRole = "root_input" | "intermediate" | "failure_site";
 
+/** Attribution confidence level. 'unverified' = fast/adversarial mode, no Slow-Path replay. */
+export type Confidence = "high" | "medium" | "low" | "unverified";
+
+// ---------------------------------------------------------------------------
+// Nested contract types
+// ---------------------------------------------------------------------------
+
 export interface CausalChainLink {
   line: number;
   variable: string;
   role: CausalRole;
+}
+
+/**
+ * Exact threshold that caused a threshold-based detector to fire.
+ * Present on shatter_points where a concrete detector (MatrixPSDDetector,
+ * ConditionNumberDetector, DivisionStabilityDetector) fired on a numeric threshold.
+ * Absent for exception-based findings (nan_inf from a raised exception).
+ */
+export interface TriggerDisclosure {
+  detector_name: string;
+  observed_value: number | string;
+  threshold: number | string;
+  comparison: ">" | "<" | ">=" | "<=" | "==" | "!=";
+  explanation: string;
 }
 
 export interface ShatterPoint {
@@ -83,6 +112,10 @@ export interface ShatterPoint {
   frequency: string;
   causal_chain: CausalChainLink[];
   fix_hint: string;
+  /** Attribution confidence. 'unverified' when Slow-Path replay was skipped (fast/adversarial mode). */
+  confidence: Confidence;
+  /** Populated by threshold-based detectors. Absent for exception-based findings. */
+  trigger_disclosure?: TriggerDisclosure;
 }
 
 export interface ResponseSummary {
@@ -98,15 +131,52 @@ export interface ScenarioCard {
   reproducible: boolean;
 }
 
+/**
+ * Full provenance record for a BlackSwan run.
+ * Enables exact reproduction of any run: same command, same output.
+ */
+export interface ReproducibilityCard {
+  blackswan_version: string;
+  python_version: string;
+  numpy_version: string;
+  platform: string;
+  seed: number;
+  scenario_name: string;
+  scenario_hash: string;
+  mode: string;
+  iterations_requested: number;
+  iterations_executed: number;
+  iterations_skipped: number;
+  budget_exhausted: boolean;
+  budget_reason: string | null;
+  timestamp_utc: string;
+  reproducible: boolean;
+  replay_command: string;
+}
+
+/** Budget exhaustion status for a run. */
+export interface Budget {
+  exhausted: boolean;
+  reason: string | null;
+}
+
 export interface BlackSwanResponse {
   version: string;
   status: ResponseStatus;
+  /** Execution mode: "fast" (no attribution) | "full" (Two-Path) | "adversarial" (GA). */
+  mode: string;
   runtime_ms: number;
   iterations_completed: number;
   summary: ResponseSummary;
   shatter_points: ShatterPoint[];
   scenario_card: ScenarioCard;
+  reproducibility_card: ReproducibilityCard;
+  budget: Budget;
 }
+
+// ---------------------------------------------------------------------------
+// Bridge options
+// ---------------------------------------------------------------------------
 
 export interface BridgeOptions {
   /** Name of function to stress-test. Omit to auto-detect. */
@@ -115,6 +185,21 @@ export interface BridgeOptions {
   iterations?: number;
   /** RNG seed for reproducibility. Overrides the scenario default. */
   seed?: number;
+  /**
+   * Execution mode. 'fast' = no attribution tracing (faster).
+   * 'full' = Two-Path with Slow-Path attribution replay.
+   * Defaults to 'fast' in the extension for responsive IDE feedback.
+   */
+  mode?: "fast" | "full";
+  /**
+   * Hard time limit in seconds. The engine stops after this many seconds
+   * even if not all iterations completed.
+   */
+  maxRuntimeSec?: number;
+  /**
+   * Hard iteration cap. Stops after N iterations regardless of scenario default.
+   */
+  maxIterations?: number;
   /** Python executable to use. Defaults to "python3" (or "python" on Windows). */
   pythonPath?: string;
   /**

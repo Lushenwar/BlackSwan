@@ -75,6 +75,14 @@ export class Orchestrator implements vscode.Disposable {
     scenarioName: string,
   ): Promise<boolean> {
     const fsPath = document.uri.fsPath;
+    
+    // ── Pre-run checks ──────────────────────────────────────────────────────
+    if (document.isUntitled) {
+      void vscode.window.showErrorMessage(
+        "BlackSwan: Please save your file to disk before running a stress test.",
+      );
+      return false;
+    }
 
     // ── Mutex check ────────────────────────────────────────────────────────
     if (this._running.has(fsPath)) {
@@ -111,6 +119,7 @@ export class Orchestrator implements vscode.Disposable {
 
           const response = await runBlackSwanEngine(fsPath, scenarioName, {
             pythonPath: this._resolvePythonPath(),
+            mode: this._resolveMode(),
             functionName,
             cwd: path.dirname(fsPath),
             signal: controller.signal,
@@ -210,6 +219,21 @@ export class Orchestrator implements vscode.Disposable {
     void vscode.window.showErrorMessage(
       `BlackSwan: Unexpected error — ${err instanceof Error ? err.message : String(err)}`,
     );
+  }
+
+  /**
+   * Resolve the execution mode from VS Code settings.
+   *
+   * 'fast'  — skip Slow-Path attribution tracing for responsive IDE feedback.
+   * 'full'  — Two-Path engine with attribution replay (slower but attributions
+   *            are marked 'high' confidence instead of 'unverified').
+   *
+   * Defaults to 'fast' when the setting is absent or unrecognised.
+   */
+  private _resolveMode(): "fast" | "full" {
+    const cfg = vscode.workspace.getConfiguration("blackswan");
+    const mode = cfg.get<string>("mode");
+    return mode === "full" ? "full" : "fast";
   }
 
   /**

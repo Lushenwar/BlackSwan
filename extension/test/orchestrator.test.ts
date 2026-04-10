@@ -48,24 +48,44 @@ function mockDocument(fsPath = FILE_PATH): vscode.TextDocument {
   } as unknown as vscode.TextDocument;
 }
 
-function makeResponse(totalFailures = 0) {
+function makeResponse(totalFailures = 0): import("../src/types").BlackSwanResponse {
   return {
     version:              "1.0",
-    status:               totalFailures === 0 ? ("no_failures" as const) : ("failures_detected" as const),
+    status:               totalFailures === 0 ? "no_failures" : "failures_detected",
+    mode:                 "full",
     runtime_ms:           200,
     iterations_completed: 50,
     summary: {
-      total_failures:      totalFailures,
-      failure_rate:        totalFailures / 50,
+      total_failures:       totalFailures,
+      failure_rate:         totalFailures / 50,
       unique_failure_types: totalFailures > 0 ? 1 : 0,
     },
     shatter_points: [],
     scenario_card: {
-      name:                "liquidity_crash",
-      parameters_applied:  {},
-      seed:                42,
-      reproducible:        true,
+      name:               "liquidity_crash",
+      parameters_applied: {},
+      seed:               42,
+      reproducible:       true,
     },
+    reproducibility_card: {
+      blackswan_version:    "0.3.0",
+      python_version:       "3.11.0",
+      numpy_version:        "1.26.0",
+      platform:             "linux",
+      seed:                 42,
+      scenario_name:        "liquidity_crash",
+      scenario_hash:        "abc123def456",
+      mode:                 "full",
+      iterations_requested: 50,
+      iterations_executed:  50,
+      iterations_skipped:   0,
+      budget_exhausted:     false,
+      budget_reason:        null,
+      timestamp_utc:        "2026-04-10T00:00:00Z",
+      reproducible:         true,
+      replay_command:       "python -m blackswan test model.py --scenario liquidity_crash --seed 42",
+    },
+    budget: { exhausted: false, reason: null },
   };
 }
 

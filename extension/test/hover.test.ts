@@ -36,7 +36,8 @@ function makeShatterPoint(overrides: Partial<ShatterPoint> = {}): ShatterPoint {
       { line: 47, variable: "adjusted_corr_matrix", role: "intermediate" },
       { line: 82, variable: "cov_matrix",           role: "failure_site" },
     ],
-    fix_hint: "Apply nearest-PSD correction (Higham 2002) after correlation perturbation.",
+    fix_hint:   "Apply nearest-PSD correction (Higham 2002) after correlation perturbation.",
+    confidence: "high",
     ...overrides,
   };
 }

@@ -33,6 +33,10 @@ const FAILURE_TYPE_LABELS: Record<FailureType, string> = {
   non_psd_matrix:         "Non-PSD Matrix",
   ill_conditioned_matrix: "Ill-Conditioned Matrix",
   bounds_exceeded:        "Bounds Exceeded",
+  division_instability:   "Division Instability",
+  exploding_gradient:     "Exploding Gradient",
+  regime_shift:           "Regime Shift",
+  logical_invariant:      "Logical Invariant Violation",
 };
 
 /** Causal role labels — failure_site is bold to make it stand out. */
