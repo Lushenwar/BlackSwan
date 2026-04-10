@@ -18,7 +18,7 @@ import traceback as tb
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from ..detectors.base import FailureDetector, Finding
+from ..detectors.base import FailureDetector, Finding, TriggerDisclosure
 from .hooks import NumPyHookCapture, NumPyHookSet
 from .tracer import FrameEvent, TracerBackend
 
@@ -47,16 +47,6 @@ class CausalLink:
     variable: str
     role: str              # "root_input" | "intermediate" | "failure_site"
     value_repr: str        # repr() of the variable value at execution time
-
-
-@dataclass
-class TriggerDisclosure:
-    """Exact threshold that caused a detector to fire."""
-    detector_name: str
-    observed_value: float | str
-    threshold: float | str
-    comparison: str        # ">" | "<" | "==" | "!="
-    explanation: str
 
 
 @dataclass

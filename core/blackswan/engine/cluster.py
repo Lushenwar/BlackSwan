@@ -18,8 +18,8 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..detectors.base import Finding
-from .replay import Attribution, CausalLink, TriggerDisclosure
+from ..detectors.base import Finding, TriggerDisclosure
+from .replay import Attribution, CausalLink
 
 
 # ---------------------------------------------------------------------------

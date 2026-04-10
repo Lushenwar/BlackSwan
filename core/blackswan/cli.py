@@ -20,45 +20,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .attribution.traceback import TracebackResolver
+from .engine.repro import build_reproducibility_card
 from .engine.runner import RunResult, StressRunner
 from .parser.auto_tagger import AutoTagger
 from .parser.graph import DependencyGraphBuilder
 from .scenarios.registry import list_scenarios, load_scenario, Scenario
-
-
-# ---------------------------------------------------------------------------
-# Static fix hints indexed by failure_type
-# ---------------------------------------------------------------------------
-
-_FIX_HINTS: dict[str, str] = {
-    "non_psd_matrix": (
-        "Apply nearest-PSD correction (e.g. Higham 2002) after correlation "
-        "perturbation, or clamp eigenvalues to a small positive epsilon before "
-        "further use: eigvals, eigvecs = np.linalg.eigh(m); "
-        "m_psd = eigvecs @ np.diag(np.maximum(eigvals, 1e-8)) @ eigvecs.T"
-    ),
-    "ill_conditioned_matrix": (
-        "Check the condition number before inversion with np.linalg.cond(). "
-        "Use np.linalg.lstsq or the pseudo-inverse (np.linalg.pinv) instead of "
-        "direct inversion for ill-conditioned systems (cond > 1e12)."
-    ),
-    "division_by_zero": (
-        "Guard the denominator against near-zero values before dividing: "
-        "use np.where(np.abs(denom) > 1e-10, num / denom, 0.0) or assert "
-        "np.all(np.abs(denom) > 1e-10) at the function boundary."
-    ),
-    "nan_inf": (
-        "Add input validation at the function boundary and check intermediate "
-        "results for NaN/Inf with np.isfinite(). Use bounded perturbation ranges "
-        "in the scenario YAML to prevent extreme inputs."
-    ),
-    "bounds_exceeded": (
-        "Review the output bounds configured in the scenario YAML or add a "
-        "clamp after computation: np.clip(result, lower, upper). Verify that "
-        "input perturbations remain within plausible financial ranges."
-    ),
-}
 
 
 def main() -> None:
@@ -118,6 +84,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="RNG seed for reproducibility. Overrides the scenario's default.",
     )
     test_p.add_argument(
+        "--mode",
+        choices=["fast", "full"],
+        default="full",
+        help=(
+            "Execution mode. "
+            "'full' (default): Fast-Path sweep + Slow-Path attribution replay. "
+            "'fast': Fast-Path only — no attribution tracing. Faster, less detail."
+        ),
+    )
+    test_p.add_argument(
         "--adversarial",
         action="store_true",
         default=False,
@@ -133,6 +109,27 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=100,
         help="Population size per generation when using --adversarial (default: 100).",
+    )
+    test_p.add_argument(
+        "--max-runtime-sec",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help=(
+            "Hard time limit in seconds. The run stops after this many seconds "
+            "even if not all iterations completed. The response includes "
+            "budget_exhausted=true and iterations_skipped."
+        ),
+    )
+    test_p.add_argument(
+        "--max-iterations",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Hard iteration cap. Stops after N iterations regardless of the "
+            "scenario's default. Takes precedence over --iterations when both are set."
+        ),
     )
 
     return parser
@@ -185,8 +182,18 @@ def _cmd_test(args: argparse.Namespace) -> None:
     iterations = args.iterations if args.iterations is not None else scenario.default_iterations
     seed = args.seed if args.seed is not None else scenario.default_seed
 
+    # Budget overrides (--max-iterations takes precedence over --iterations).
+    max_iterations = getattr(args, "max_iterations", None)
+    max_runtime_sec = getattr(args, "max_runtime_sec", None)
+    # When --max-iterations is set, it acts as the iteration cap.
+    effective_iterations = max_iterations if max_iterations is not None else iterations
+
+    # Execution mode.
+    mode = getattr(args, "mode", "full") or "full"
+
     # Select detector suite automatically from AST analysis of the target file.
     detectors = AutoTagger(file_path).detector_suite()
+
     if getattr(args, "adversarial", False):
         from .engine.adversarial import EvolutionaryStressRunner
         n_generations = iterations  # --iterations is repurposed as generation count
@@ -201,24 +208,37 @@ def _cmd_test(args: argparse.Namespace) -> None:
             population_size=population_size,
             elite_fraction=0.2,
         )
+        effective_mode = "adversarial"
     else:
         runner = StressRunner(
             fn=fn,
             base_inputs=base_inputs,
-            scenario=_IterationOverride(scenario, iterations),
+            scenario=_IterationOverride(scenario, effective_iterations),
             detectors=detectors,
             seed=seed,
+            mode=mode,
+            max_runtime_sec=max_runtime_sec,
+            max_iterations=max_iterations,
         )
+        effective_mode = mode
+
     result = runner.run()
 
-    # Resolve line numbers for every finding.
-    resolver = TracebackResolver(file_path)
-    resolved = [resolver.resolve(f) for f in result.findings]
-
     # Emit the full JSON response to stdout.
-    print(json.dumps(_build_response(resolved, result, scenario, seed, file_path), indent=2))
+    print(json.dumps(
+        _build_response(
+            result=result,
+            scenario=scenario,
+            seed=seed,
+            file_path=file_path,
+            mode=effective_mode,
+            iterations_requested=effective_iterations,
+        ),
+        indent=2,
+    ))
 
-    sys.exit(1 if resolved else 0)
+    has_failures = any(b.total_occurrences > 0 for b in result.root_cause_buckets)
+    sys.exit(1 if has_failures else 0)
 
 
 # ---------------------------------------------------------------------------
@@ -290,63 +310,98 @@ def _load_function(file_path: Path, function_name: str | None) -> tuple:
 # ---------------------------------------------------------------------------
 
 def _build_response(
-    findings: list,
     result: RunResult,
-    scenario: Scenario,
+    scenario: Any,
     seed: int,
     file_path: Path,
+    mode: str,
+    iterations_requested: int,
 ) -> dict:
     """
-    Aggregate per-iteration findings into a contract-compliant response dict.
+    Build the contract-compliant JSON response from a completed RunResult.
 
-    Findings with the same failure_type are merged into one shatter_point;
-    the line from the first (earliest) such finding is used, and the frequency
-    string reports how many iterations produced that failure type.
+    Uses root_cause_buckets as the primary source of truth (already clustered,
+    shrunk, and attributed by the engine). Falls back to AST-based causal chain
+    construction when Slow-Path attribution is unavailable (fast mode /
+    adversarial mode).
 
-    Also populates:
-      causal_chain     — walked backwards from the failure line via the
-                         dependency graph (DependencyGraphBuilder).
-      fix_hint         — static lookup from _FIX_HINTS by failure_type.
-      parameters_applied — the perturbation spec from the scenario definition,
-                           describing every target, type, distribution, and range
-                           that was active during the run.
+    Includes:
+      reproducibility_card  — exact provenance for replay.
+      confidence            — per shatter_point confidence level.
+      trigger_disclosure    — detector threshold that caused each finding.
+      budget                — budget exhaustion status.
     """
-    from collections import defaultdict
-
-    # Preserve first-seen insertion order while grouping by failure_type.
-    groups: dict[str, list] = defaultdict(list)
-    for f in findings:
-        groups[f.failure_type].append(f)
+    buckets = result.root_cause_buckets
+    total_occurrences = sum(b.total_occurrences for b in buckets)
+    rate = total_occurrences / result.iterations_completed if result.iterations_completed > 0 else 0.0
 
     shatter_points = []
-    for i, (failure_type, group) in enumerate(groups.items(), start=1):
-        first = group[0]
-        count = len(group)
-        pct = (count / result.iterations_completed * 100) if result.iterations_completed > 0 else 0.0
-        shatter_points.append({
-            "id": f"sp_{i:03d}",
-            "line": first.line,
-            "column": first.column,
-            "severity": first.severity,
-            "failure_type": failure_type,
-            "message": first.message,
-            "frequency": f"{count} / {result.iterations_completed} iterations ({pct:.1f}%)",
-            "causal_chain": _build_causal_chain(first.line, file_path),
-            "fix_hint": _FIX_HINTS.get(failure_type, ""),
-        })
+    for i, bucket in enumerate(buckets, start=1):
+        pct = bucket.occurrence_rate * 100
 
-    total = len(findings)
-    rate = total / result.iterations_completed if result.iterations_completed > 0 else 0.0
+        # Causal chain: Slow-Path attribution first; AST graph walk as fallback.
+        causal_chain: list[dict] = []
+        if bucket.causal_chain:
+            causal_chain = [
+                {"line": link.line, "variable": link.variable, "role": link.role}
+                for link in bucket.causal_chain
+            ]
+        elif bucket.line is not None:
+            causal_chain = _build_causal_chain(bucket.line, file_path)
+
+        # Trigger disclosure (populated by concrete detectors).
+        trigger_disclosure = None
+        td = bucket.representative_finding.trigger_disclosure
+        if td is not None:
+            trigger_disclosure = {
+                "detector_name": td.detector_name,
+                "observed_value": td.observed_value,
+                "threshold": td.threshold,
+                "comparison": td.comparison,
+                "explanation": td.explanation,
+            }
+
+        sp: dict[str, Any] = {
+            "id": f"sp_{i:03d}",
+            "line": bucket.line,
+            "column": None,
+            "severity": bucket.severity,
+            "failure_type": bucket.failure_type,
+            "message": bucket.message,
+            "frequency": (
+                f"{bucket.total_occurrences} / {result.iterations_completed} "
+                f"iterations ({pct:.1f}%)"
+            ),
+            "causal_chain": causal_chain,
+            "fix_hint": bucket.fix_hint,
+            "confidence": bucket.confidence,
+        }
+        if trigger_disclosure is not None:
+            sp["trigger_disclosure"] = trigger_disclosure
+
+        shatter_points.append(sp)
+
+    repro_card = build_reproducibility_card(
+        scenario=scenario,
+        seed=seed,
+        mode=mode,
+        iterations_requested=iterations_requested,
+        iterations_executed=result.iterations_completed,
+        budget_exhausted=result.budget_exhausted,
+        budget_reason=result.budget_reason,
+        file_path=file_path,
+    )
 
     return {
         "version": "1.0",
-        "status": "failures_detected" if total > 0 else "no_failures",
+        "status": "failures_detected" if total_occurrences > 0 else "no_failures",
+        "mode": mode,
         "runtime_ms": result.runtime_ms,
         "iterations_completed": result.iterations_completed,
         "summary": {
-            "total_failures": total,
+            "total_failures": total_occurrences,
             "failure_rate": round(rate, 4),
-            "unique_failure_types": len(groups),
+            "unique_failure_types": len(buckets),
         },
         "shatter_points": shatter_points,
         "scenario_card": {
@@ -354,6 +409,11 @@ def _build_response(
             "parameters_applied": _parameters_applied(scenario),
             "seed": seed,
             "reproducible": True,
+        },
+        "reproducibility_card": repro_card.to_dict(),
+        "budget": {
+            "exhausted": result.budget_exhausted,
+            "reason": result.budget_reason,
         },
     }
 
@@ -445,7 +505,7 @@ def _build_causal_chain(line: int | None, file_path: Path) -> list[dict]:
     return result
 
 
-def _parameters_applied(scenario: Scenario) -> dict:
+def _parameters_applied(scenario: Any) -> dict:
     """
     Summarise the perturbation specification from *scenario* as a plain dict.
 
@@ -453,7 +513,7 @@ def _parameters_applied(scenario: Scenario) -> dict:
     and numeric range so the scenario_card is self-documenting.
     """
     applied: dict[str, Any] = {}
-    for p in scenario.perturbations:
+    for p in getattr(scenario, "perturbations", []):
         entry: dict[str, Any] = {
             "type": p.type,
             "distribution": p.distribution,

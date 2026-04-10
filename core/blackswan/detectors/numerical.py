@@ -7,7 +7,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-from .base import FailureDetector, Finding
+from .base import FailureDetector, Finding, TriggerDisclosure
 
 
 class NaNInfDetector(FailureDetector):
@@ -124,6 +124,16 @@ class DivisionStabilityDetector(FailureDetector):
                 "Division would produce an unreliable or infinite result."
             ),
             iteration=iteration,
+            trigger_disclosure=TriggerDisclosure(
+                detector_name="DivisionStabilityDetector",
+                observed_value=round(bad_val, 15),
+                threshold=self.epsilon,
+                comparison="<=",
+                explanation=(
+                    f"|denominator| = {abs(bad_val):.3e} is <= epsilon {self.epsilon:.0e}. "
+                    "Division by a near-zero denominator produces unreliable or infinite results."
+                ),
+            ),
         )
 
 

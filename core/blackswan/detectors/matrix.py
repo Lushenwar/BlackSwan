@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 
-from .base import FailureDetector, Finding
+from .base import FailureDetector, Finding, TriggerDisclosure
 
 
 class MatrixPSDDetector(FailureDetector):
@@ -46,6 +46,16 @@ class MatrixPSDDetector(FailureDetector):
                 "and portfolio variance to go negative."
             ),
             iteration=iteration,
+            trigger_disclosure=TriggerDisclosure(
+                detector_name="MatrixPSDDetector",
+                observed_value=round(min_eigval, 10),
+                threshold=-self.epsilon,
+                comparison="<",
+                explanation=(
+                    f"Minimum eigenvalue {min_eigval:.4e} fell below threshold "
+                    f"{-self.epsilon:.0e}. A PSD matrix requires all eigenvalues >= 0."
+                ),
+            ),
         )
 
     def _check_value(self, value: Any) -> tuple[np.ndarray, float] | None:
@@ -110,6 +120,17 @@ class ConditionNumberDetector(FailureDetector):
                 "producing an unreliable result."
             ),
             iteration=iteration,
+            trigger_disclosure=TriggerDisclosure(
+                detector_name="ConditionNumberDetector",
+                observed_value=round(cond, 3),
+                threshold=self.threshold,
+                comparison=">",
+                explanation=(
+                    f"Condition number {cond:.3e} exceeded threshold {self.threshold:.0e}. "
+                    "Matrices with high condition numbers amplify floating-point errors "
+                    "proportionally during inversion."
+                ),
+            ),
         )
 
     def _check_value(self, value: Any) -> tuple[np.ndarray, float] | None:

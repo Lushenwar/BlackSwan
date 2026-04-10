@@ -12,6 +12,39 @@ from typing import Any
 
 
 @dataclass
+class TriggerDisclosure:
+    """
+    Exact numerical threshold that caused a detector to fire.
+
+    Provides full transparency about the detector's decision boundary so users
+    can verify, tune, or override thresholds without reading source code.
+
+    Examples:
+        TriggerDisclosure(
+            detector_name="MatrixPSDDetector",
+            observed_value=-0.0034,
+            threshold=-1e-10,
+            comparison="<",
+            explanation="Minimum eigenvalue -0.0034 fell below threshold -1e-10",
+        )
+    """
+    detector_name: str
+    """Name of the detector class that fired."""
+
+    observed_value: float | str
+    """The actual numerical value that crossed the threshold."""
+
+    threshold: float | str
+    """The configured threshold value."""
+
+    comparison: str
+    """Comparison operator that defines the trigger: '>' | '<' | '>=' | '<=' | '==' | '!='"""
+
+    explanation: str
+    """Human-readable explanation of why this value triggered the detector."""
+
+
+@dataclass
 class Finding:
     """
     A single failure observed in one simulation iteration.
@@ -45,6 +78,13 @@ class Finding:
     Each entry is (filename, lineno). Populated by the runner; empty for
     detector-based findings where no exception was raised.
     The attribution layer uses these to resolve the proximate source line.
+    """
+
+    trigger_disclosure: TriggerDisclosure | None = None
+    """
+    Exact threshold details that caused this detector to fire.
+    Populated by concrete detectors; None for exception-based findings.
+    Provides full transparency into the detector's decision boundary.
     """
 
 
