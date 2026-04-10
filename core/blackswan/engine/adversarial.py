@@ -333,12 +333,20 @@ class EvolutionaryStressRunner:
 
         runtime_ms = int((time.monotonic() - start) * 1000)
 
+        from .cluster import cluster_findings
+        buckets = cluster_findings(
+            findings=all_findings,
+            total_iterations=total_iterations,
+        )
+
         return RunResult(
             iterations_completed=total_iterations,
             findings=all_findings,
+            root_cause_buckets=buckets,
             runtime_ms=runtime_ms,
             seed=self.seed,
             baseline_established=baseline_established,
+            mode="adversarial",
         )
 
     def _evaluate_individual(self, perturbed: dict, iteration: int) -> list[Finding]:

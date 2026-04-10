@@ -17,8 +17,9 @@ response_shatter_points.json
 # Markdown exclusion (as per user request for this commit)
 # *.md
 
-# AI & Temp Files
+# AI & Internal Spec Files (never publish)
 CLAUDE.md
+CLAUDE_*.md
 blackswan_claude_md_prompt.md
 .git_status_output.txt
 status_utf8.txt
