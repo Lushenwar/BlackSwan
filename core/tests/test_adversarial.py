@@ -1,10 +1,19 @@
-"""Tests for blackswan.engine.adversarial — GA primitive types (Task B1)."""
+"""Tests for blackswan.engine.adversarial — GA primitive types (Task B1) and EvolutionaryStressRunner (Task B2)."""
 
 import numpy as np
 import pytest
 
 from blackswan.detectors.base import Finding
-from blackswan.engine.adversarial import Individual, compute_fitness, crossover, mutate
+from blackswan.detectors.matrix import MatrixPSDDetector
+from blackswan.engine.adversarial import (
+    Individual,
+    EvolutionaryStressRunner,
+    compute_fitness,
+    crossover,
+    mutate,
+)
+from blackswan.engine.runner import RunResult
+from blackswan.scenarios.registry import load_scenario
 
 
 class TestIndividual:
@@ -121,3 +130,81 @@ class TestMutate:
         ind = Individual(params={"a": 1.0}, fitness=42.0)
         mutated = mutate(ind, self._make_rng())
         assert mutated.fitness == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Inline fixture for EvolutionaryStressRunner tests
+# ---------------------------------------------------------------------------
+
+def _broken_cov(
+    weights=np.array([0.3, 0.3, 0.4]),
+    vol=np.array([0.15, 0.20, 0.10]),
+    correlation=0.0,
+) -> np.ndarray:
+    n = len(vol)
+    corr_val = 0.8 + correlation
+    corr_matrix = np.full((n, n), corr_val)
+    np.fill_diagonal(corr_matrix, 1.0)
+    return np.diag(vol) @ corr_matrix @ np.diag(vol)
+
+
+class TestEvolutionaryStressRunner:
+    def _runner(self, generations=5, pop_size=20):
+        scenario = load_scenario("liquidity_crash")
+        return EvolutionaryStressRunner(
+            fn=_broken_cov,
+            base_inputs={"correlation": 0.0},
+            scenario=scenario,
+            detectors=[MatrixPSDDetector()],
+            seed=42,
+            n_generations=generations,
+            population_size=pop_size,
+            elite_fraction=0.2,
+        )
+
+    def test_returns_run_result(self):
+        result = self._runner().run()
+        assert isinstance(result, RunResult)
+
+    def test_runtime_ms_non_negative(self):
+        result = self._runner().run()
+        assert result.runtime_ms >= 0
+
+    def test_seed_is_stored(self):
+        result = self._runner().run()
+        assert result.seed == 42
+
+    def test_finds_failures_on_broken_fixture(self):
+        result = self._runner(generations=5, pop_size=20).run()
+        assert len(result.findings) > 0
+        assert any(f.failure_type == "non_psd_matrix" for f in result.findings)
+
+    def test_same_seed_deterministic(self):
+        r1 = self._runner(generations=5, pop_size=20).run()
+        r2 = self._runner(generations=5, pop_size=20).run()
+        assert len(r1.findings) == len(r2.findings)
+
+    def test_iterations_completed_equals_generations_times_population(self):
+        result = self._runner(generations=3, pop_size=10).run()
+        assert result.iterations_completed == 3 * 10
+
+    def test_baseline_established_true_on_clean_fn(self):
+        result = self._runner().run()
+        assert result.baseline_established is True
+
+    def test_finds_failure_under_500_iterations(self):
+        # 25 generations × 20 pop = 500 evaluations max
+        runner = EvolutionaryStressRunner(
+            fn=_broken_cov,
+            base_inputs={"correlation": 0.0},
+            scenario=load_scenario("liquidity_crash"),
+            detectors=[MatrixPSDDetector()],
+            seed=42,
+            n_generations=25,
+            population_size=20,
+            elite_fraction=0.2,
+        )
+        result = runner.run()
+        psd = [f for f in result.findings if f.failure_type == "non_psd_matrix"]
+        assert len(psd) > 0
+        assert result.iterations_completed <= 500
