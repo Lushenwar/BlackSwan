@@ -7,6 +7,9 @@
 
 **A debugger for mathematical fragility.**
 
+<img width="1280" height="720" alt="logo" src="https://github.com/user-attachments/assets/a1437241-bbd4-4134-ba24-a3cfa1421918" />
+
+
 BlackSwan stress-tests financial and mathematical Python code to find the exact line where your model breaks under extreme conditions — before your clients do.
 
 Standard linters tell you your code runs. BlackSwan tells you where the math fails.
