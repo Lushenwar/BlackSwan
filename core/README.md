@@ -1,98 +1,218 @@
-# BlackSwan 
+# blackswan
 
-**A debugger for mathematical and financial fragility.**
+[![PyPI version](https://img.shields.io/pypi/v/blackswan?color=black&label=blackswan)](https://pypi.org/project/blackswan/)
+[![Python](https://img.shields.io/pypi/pyversions/blackswan)](https://pypi.org/project/blackswan/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Lushenwar/BlackSwan/blob/main/LICENSE)
 
-A black swan in business is an unpredictable, extremely rare event with a massive, often catastrophic impact, which is inappropriately rationalized in hindsight as having been foreseeable.
-<img width="1280" height="720" alt="logo" src="https://github.com/user-attachments/assets/68c066a6-2846-459c-9364-01afd02a00e9" />
+**A stress-testing engine for financial and mathematical Python code.**
 
-Standard linters (Pylint, Flake8, Pyright) catch syntax and type errors—they make sure your code runs. **BlackSwan catches logical and numerical fragility**—it makes sure your math survives under pressure. 
-
-BlackSwan is a VS Code extension backed by a decoupled Python engine. It stress-tests mathematical logic in Python code using Monte Carlo simulations to find the exact line where a model breaks under extreme conditions, and explains why.
-
----
-
-## Features
-
-- **Line-Level Attribution:** Draws red squiggly lines on the exact line of code responsible for a mathematical failure.
-- **Causal Chains:** Hover over a failure to see the exact chain of variables that led from the perturbed input to the shatter point.
-- **Built-in Financial Scenarios:** Stress test using 5 preset scenarios: *Liquidity Crash, Volatility Spike, Correlation Breakdown, Rate Shock, and Missing Data.*
-- **5 Core Failure Detectors:**
-  - `NaNInfDetector`: Catches any computation producing NaN or Inf.
-  - `DivisionStabilityDetector`: Flags divisions where the denominator approaches zero.
-  - `MatrixPSDDetector`: Verifies positive semi-definiteness of covariance/correlation matrices.
-  - `ConditionNumberDetector`: Flags ill-conditioned matrices before inversion.
-  - `BoundsDetector`: Catches outputs exceeding plausible bounds.
-- **Dependency Graph (DAG):** Visualize your model's data flow and pinpoint root causes in the BlackSwan sidebar panel.
+BlackSwan finds the exact source line where your model breaks under extreme conditions — before production does. It is a debugger for numerical fragility, not a linter, not a simulator.
 
 ---
 
 ## Installation
 
-BlackSwan consists of two independent systems: the **Python Engine** (which does the heavy lifting) and the **VS Code Extension** (which renders the results). **You must install both.**
-
-### Step 1: Install the Python Engine
-The core engine must be installed in the Python environment you use to run your models.
-
-Open your terminal and activate your project's virtual environment, then run:
 ```bash
-pip install blackswan-core
+pip install blackswan
 ```
 
-### Step 2: Install the VS Code Extension
-Currently, BlackSwan is distributed as a `.vsix` package. 
-
-1. Download the latest `blackswan-vscode.vsix` file from the [Releases](#) page.
-2. Open Visual Studio Code.
-3. Open the Extensions view (`Ctrl+Shift+X` or `Cmd+Shift+X` on Mac).
-4. Click the `...` (Views and More Actions) menu in the top right of the Extensions panel.
-5. Select **"Install from VSIX..."**
-6. Locate and select the `blackswan-vscode.vsix` file you downloaded.
-
-*Note: Ensure your VS Code Python interpreter is set to the same environment where you installed `blackswan-core`.*
+Requires **Python 3.11+** and NumPy 1.26+.
 
 ---
 
-## Usage
-
-### Using the VS Code Extension (Recommended)
-1. Open a Python file containing financial or mathematical functions.
-2. Look for the **"▶ Run BlackSwan"** CodeLens button hovering above your function definitions.
-3. Click it and select a stress scenario from the dropdown (e.g., `liquidity_crash`).
-4. Watch the progress bar as the engine runs thousands of iterations.
-5. **Review Failures:** Any lines that fail under stress will be underlined in red. Hover over them to see the failure frequency, explanation, and causal chain.
-
-### Using the CLI Engine
-The Python engine is fully functional as a standalone CLI tool. You can run it directly in your terminal, making it perfect for CI/CD pipelines.
+## Quickstart
 
 ```bash
-# Run a specific scenario on a model
-python -m blackswan test risk_model.py --scenario liquidity_crash
-
-# List all available stress scenarios
-python -m blackswan --list-scenarios
+# Stress-test a function with the liquidity crash scenario
+python -m blackswan test models/risk.py --scenario liquidity_crash
 ```
-The CLI outputs a structured JSON report detailing all shatter points, causal chains, and scenario cards for exact reproducibility.
+
+```json
+{
+  "status": "failures_detected",
+  "runtime_ms": 2840,
+  "iterations_completed": 5000,
+  "summary": {
+    "total_failures": 847,
+    "failure_rate": 0.1694,
+    "unique_failure_types": 1
+  },
+  "shatter_points": [
+    {
+      "line": 36,
+      "severity": "critical",
+      "failure_type": "non_psd_matrix",
+      "message": "Covariance matrix loses positive semi-definiteness when pairwise correlation exceeds 0.91. Smallest eigenvalue: -0.0034.",
+      "frequency": "847 / 5000 iterations (16.9%)",
+      "causal_chain": [
+        { "line": 8,  "variable": "correlation", "role": "root_input" },
+        { "line": 31, "variable": "corr_matrix",  "role": "intermediate" },
+        { "line": 36, "variable": "cov_matrix",   "role": "failure_site" }
+      ],
+      "fix_hint": "Apply nearest-PSD correction (Higham 2002) after correlation perturbation, or clamp eigenvalues to epsilon."
+    }
+  ]
+}
+```
 
 ---
 
-## Supported Code Patterns
-BlackSwan V1 is deliberately focused on portfolio risk, covariance/correlation analysis, and VaR-style risk models.
+## CLI Reference
 
-**Supported:**
-- Pure functions with NumPy/Pandas inputs and outputs
-- Explicit variable assignments and NumPy array operations
+```
+python -m blackswan test <file> [options]
+
+Options:
+  --scenario     Preset scenario name (required)
+  --function     Target function name (auto-detected if omitted)
+  --iterations   Number of Monte Carlo iterations (default: 5000)
+  --seed         Random seed for reproducibility (default: 42)
+  --adversarial  Use genetic algorithm to search for worst-case inputs
+  --population   GA population size (default: 100, requires --adversarial)
+```
+
+**Exit codes:** `0` = no failures, `1` = failures detected, `2` = engine error.
+
+### Available Scenarios
+
+| Name | Description |
+|---|---|
+| `liquidity_crash` | Spread widening, vol expansion, correlation stress, turnover collapse |
+| `vol_spike` | 2–4× volatility multiplier, mild correlation increase |
+| `correlation_breakdown` | Pairwise correlation shift +0.20–+0.50 |
+| `rate_shock` | +100–+300 bps interest rate shock with spread widening |
+| `missing_data` | Random NaN injection and partial time series truncation |
+
+---
+
+## Python API
+
+```python
+from blackswan.engine.runner import StressRunner
+from blackswan.scenarios.registry import load_scenario
+
+scenario = load_scenario("liquidity_crash")
+runner = StressRunner(scenario)
+
+result = runner.run(
+    calculate_portfolio_var,
+    base_inputs={"weights": weights, "vol": vols, "correlation": 0.0},
+)
+
+print(f"Failures: {len(result.findings)}")
+for finding in result.findings:
+    print(f"  Line {finding.line} [{finding.severity}]: {finding.message}")
+```
+
+### Adversarial API
+
+```python
+from blackswan.engine.adversarial import EvolutionaryStressRunner
+
+runner = EvolutionaryStressRunner(
+    scenario,
+    n_generations=20,
+    population_size=100,
+    elite_fraction=0.2,
+)
+result = runner.run(fn, base_inputs)
+```
+
+### Custom Detectors
+
+```python
+from blackswan.detectors.numerical import LogicalInvariantDetector
+
+# Weights must always sum to 1 (+/-1e-6)
+invariant = LogicalInvariantDetector(
+    assertion=lambda inputs, output: abs(output.sum() - 1.0) < 1e-6,
+    name="weights_sum_to_one",
+)
+runner = StressRunner(scenario, extra_detectors=[invariant])
+```
+
+---
+
+## Failure Detectors
+
+| Detector | Catches | Always active? |
+|---|---|---|
+| `NaNInfDetector` | NaN or Inf in any output | Yes |
+| `DivisionStabilityDetector` | Denominator approaching zero | Yes |
+| `MatrixPSDDetector` | Covariance/correlation matrix non-PSD | Auto (on matrix code) |
+| `ConditionNumberDetector` | Ill-conditioned matrices (cond > 1e12) | Auto (on `linalg.inv`) |
+| `BoundsDetector` | Outputs outside configurable plausible ranges | Auto |
+| `ExplodingGradientDetector` | Output growth > 100x input perturbation | Auto |
+| `RegimeShiftDetector` | Structural breaks in output distribution | Auto |
+| `LogicalInvariantDetector` | User-defined assertions | On demand |
+
+Detectors are auto-tagged to relevant source lines via AST analysis.
+
+---
+
+## Custom Scenarios
+
+Create a YAML file and pass its path as `--scenario`:
+
+```yaml
+name: my_scenario
+description: "Custom stress test for credit portfolio"
+perturbations:
+  - target: spread
+    type: multiplicative
+    distribution: lognormal
+    mu: 2.0
+    sigma: 0.4
+    constraints:
+      min: 1.0
+      max: 5.0
+  - target: correlation
+    type: additive
+    distribution: uniform
+    low: 0.15
+    high: 0.40
+global_constraints:
+  - target: correlation
+    min_value: -1.0
+    max_value: 0.95
+defaults:
+  iterations: 5000
+  seed: 42
+```
+
+```bash
+python -m blackswan test models/credit.py --scenario path/to/my_scenario.yaml
+```
+
+---
+
+## What BlackSwan Supports
+
+**Works well on:**
+- Pure functions with NumPy / Pandas inputs and outputs
+- Explicit variable assignments
+- NumPy array operations, `linalg`, random
 - Pandas DataFrame column operations
-- Single-file scripts and Jupyter notebook cells (exported to script)
+- Single-file scripts and focused modules
 
-**Not Supported in V1:**
-- Deeply nested class hierarchies with complex state/side-effects
+**Out of scope for V1:**
+- Deeply nested class hierarchies with side effects
+- Config-driven logic loading parameters from databases
 - Multi-threaded or async computation pipelines
-- Sprawling multi-package codebases with circular imports
+- C extensions or Cython modules
 
 ---
 
-## 🤝 Contributing
-BlackSwan's engine and VS Code extension are deeply decoupled. If you are interested in adding new numerical detectors or contributing to the AST parser, please see our [ARCHITECTURE.md](docs/ARCHITECTURE.md) and [CONTRIBUTING.md](docs/CONTRIBUTING.md) guides.
+## Links
 
-## 📄 License
-[MIT License](LICENSE)
+- [GitHub](https://github.com/Lushenwar/BlackSwan)
+- [Architecture](https://github.com/Lushenwar/BlackSwan/blob/main/docs/ARCHITECTURE.md)
+- [Scenarios](https://github.com/Lushenwar/BlackSwan/blob/main/docs/SCENARIOS.md)
+- [Changelog](https://github.com/Lushenwar/BlackSwan/blob/main/CHANGELOG.md)
+- [Bug Tracker](https://github.com/Lushenwar/BlackSwan/issues)
+
+---
+
+## License
+
+MIT

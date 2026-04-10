@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "blackswan"
-version = "0.1.1"
+version = "0.2.0"
 description = "Stress-test mathematical and financial logic in Python code — find the exact line where models break."
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
@@ -19,9 +19,12 @@ keywords = [
     "monte-carlo",
     "numerical-stability",
     "financial-modeling",
+    "genetic-algorithm",
+    "adversarial-testing",
     "debugger",
     "var",
     "covariance",
+    "portfolio-risk",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -33,8 +36,10 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Debuggers",
+    "Topic :: Software Development :: Testing",
     "Topic :: Scientific/Engineering :: Mathematics",
     "Topic :: Office/Business :: Financial",
+    "Typing :: Typed",
 ]
 dependencies = [
     "numpy>=1.26",
@@ -46,11 +51,15 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-cov>=4.1",
+    "build>=1.0",
+    "twine>=5.0",
 ]
 
 [project.urls]
-Homepage   = "https://github.com/Lushenwar/BlackSwan"
-Repository = "https://github.com/Lushenwar/BlackSwan"
+Homepage      = "https://github.com/Lushenwar/BlackSwan"
+Repository    = "https://github.com/Lushenwar/BlackSwan"
+Documentation = "https://github.com/Lushenwar/BlackSwan/blob/main/docs/ARCHITECTURE.md"
+Changelog     = "https://github.com/Lushenwar/BlackSwan/blob/main/CHANGELOG.md"
 "Bug Tracker" = "https://github.com/Lushenwar/BlackSwan/issues"
 
 [project.scripts]
