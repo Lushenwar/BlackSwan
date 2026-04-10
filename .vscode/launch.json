@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "runtimeExecutable": "${execPath}",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/extension",
+        "${workspaceFolder}/core/tests/fixtures/broken_covariance.py"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/extension/out/**/*.js"
+      ],
+      "preLaunchTask": "npm: compile"
+    },
+    {
+      "name": "Extension Tests",
+      "type": "extensionHost",
+      "request": "launch",
+      "runtimeExecutable": "${execPath}",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/extension",
+        "--extensionTestsPath=${workspaceFolder}/extension/test"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/extension/out/**/*.js"
+      ],
+      "preLaunchTask": "npm: compile"
+    }
+  ]
+}

@@ -196,6 +196,20 @@ class StressRunner:
 
         runtime_ms = int((time.monotonic() - start) * 1000)
 
+        # ── AST line resolution (runs in ALL modes, zero tracing overhead) ──
+        # TracebackResolver uses a lightweight AST walk to find the proximate
+        # failure line for detector-based findings that have no exc_frames.
+        # This must run before clustering so bucket.line is populated even when
+        # mode=fast (Slow-Path is skipped).  Without this, diagnostics land on
+        # Ln 1 and the causal-chain / DAG have no data.
+        if self._target_filename and all_findings:
+            try:
+                from ..attribution.traceback import TracebackResolver
+                _resolver = TracebackResolver(self._target_filename)
+                all_findings = [_resolver.resolve(f) for f in all_findings]
+            except Exception:
+                pass  # best-effort — proceed with unresolved lines
+
         # ── Slow-Path replay (skipped in fast mode) ──────────────────────
         attributions: dict[int, Attribution] = {}
         if self.mode != "fast" and self._target_filename and all_findings:
