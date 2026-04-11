@@ -40,6 +40,26 @@ npm install
 
 ---
 
+## Building the Extension Package
+
+To produce a `.vsix` for local installation or release:
+
+```bash
+cd extension
+npm run compile
+npx @vscode/vsce package --no-dependencies
+```
+
+This outputs `blackswan-vscode-<version>.vsix` in the `extension/` directory. Install it in VS Code with:
+
+```bash
+code --install-extension blackswan-vscode-0.3.0.vsix
+```
+
+Or via the Extensions panel: `···` menu → **Install from VSIX…**
+
+---
+
 ## Running Tests
 
 ### Python Engine

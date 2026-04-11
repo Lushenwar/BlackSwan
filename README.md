@@ -68,9 +68,21 @@ Requires Python 3.11+.
 
 ### VS Code Extension
 
-Install from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=Lushenwar.blackswan) or download the `.vsix` from [Releases](https://github.com/Lushenwar/BlackSwan/releases).
+<p align="center">
+  <img src="extension/media/logo.png" width="120" alt="BlackSwan extension icon" />
+</p>
 
-Once installed, open any Python file and click **▶ Run BlackSwan** above a function definition.
+**v0.3.0** — Install from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=Lushenwar.blackswan) or download [`blackswan-vscode-0.3.0.vsix`](https://github.com/Lushenwar/BlackSwan/releases/latest) from Releases.
+
+To install manually from the `.vsix`:
+
+```bash
+code --install-extension blackswan-vscode-0.3.0.vsix
+```
+
+Or: **Extensions** panel → `···` menu → **Install from VSIX…**
+
+Once installed, open any Python file containing numerical logic and click **▶ Run BlackSwan** above a function definition.
 
 ---
 
@@ -82,7 +94,8 @@ Once installed, open any Python file and click **▶ Run BlackSwan** above a fun
 2. Click **▶ Run BlackSwan** above any function
 3. Select a preset stress scenario from the dropdown
 4. Watch the progress bar — failures appear as red squiggles with hover tooltips
-5. Open the **BlackSwan DAG** panel to explore the dependency graph with failure nodes highlighted
+5. Click any squiggle to see the failure type, frequency, and a full causal chain in the hover tooltip
+6. Open the **BlackSwan DAG** panel to explore the dependency graph — failure site nodes glow red, propagation nodes orange, root inputs yellow
 
 **Settings** (`Ctrl+,` → search "BlackSwan"):
 

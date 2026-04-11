@@ -198,7 +198,7 @@ extension/src/
 ├── hover.ts            # BlackSwanHoverProvider — rich tooltips with causal chain
 ├── progress.ts         # ProgressSession wrapping vscode.withProgress
 ├── orchestrator.ts     # Run mutex, progress wiring, error routing
-├── dagPanel.ts         # DagPanelController — builds DAG webview from response
+├── dagPanel.ts         # DagPanelController — builds DAG webview from response; pure-SVG rendering, dark fintech theme, KPI strip, slide-in detail drawer
 └── types.ts            # EngineRuntimeError, EngineFrameworkError, EngineProtocolError
 ```
 
@@ -228,8 +228,8 @@ BlackSwanHoverProvider.set(uri, shatter_points)
         │  stores tooltips keyed by line number
         ▼
 DagPanelController.show(response, uri)
-        │  opens/updates webview with D3/Dagre DAG
-        │  failure nodes = red, intermediate = orange, root = yellow
+        │  opens/updates webview with pure-SVG DAG (manual layout, no D3/Dagre)
+        │  failure_site = red (glow), intermediate = orange, root_input = yellow
 ```
 
 ### Python Path Resolution

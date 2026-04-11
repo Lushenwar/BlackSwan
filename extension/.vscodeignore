@@ -1,0 +1,19 @@
+# Source TypeScript — compiled output in out/src/ is what runs
+src/**
+__mocks__/**
+test/**
+
+# Compiled test/mock artefacts — not needed at runtime
+out/test/**
+out/__mocks__/**
+
+# Build/config artefacts
+tsconfig.json
+node_modules/**
+test_resolve.js
+.eslintrc*
+.prettierrc*
+*.map
+
+# Dev files
+.vscode/**
