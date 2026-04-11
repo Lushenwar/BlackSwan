@@ -72,9 +72,8 @@ Requires Python 3.11+.
   <img src="extension/media/logo.png" width="120" alt="BlackSwan extension icon" />
 </p>
 
-**v0.3.0** — Install from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=Lushenwar.blackswan) or download [`blackswan-vscode-0.3.0.vsix`](https://github.com/Lushenwar/BlackSwan/releases/latest) from Releases.
+**v0.3.0** — Download [`blackswan-vscode-0.3.0.vsix`](https://github.com/Lushenwar/BlackSwan/releases/latest) from Releases and install it manually:
 
-To install manually from the `.vsix`:
 
 ```bash
 code --install-extension blackswan-vscode-0.3.0.vsix
