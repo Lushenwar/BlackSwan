@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "blackswan"
-version = "0.2.0"
+version = "0.3.0"
 description = "Stress-test mathematical and financial logic in Python code — find the exact line where models break."
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
