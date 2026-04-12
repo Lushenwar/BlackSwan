@@ -423,44 +423,92 @@ describe("BlackSwanCodeActionProvider", () => {
   const provider = new BlackSwanCodeActionProvider();
   const dummyRange = new vscode.Range(81, 0, 81, 9999);
 
-  test("returns a code action for a diagnostic with a fix hint", () => {
+  // Helper: get actions by rough title match
+  function getAction(actions: vscode.CodeAction[], titleFragment: string): vscode.CodeAction {
+    const match = actions.find((a) => a.title.includes(titleFragment));
+    if (!match) throw new Error(`No action with title containing '${titleFragment}'`);
+    return match;
+  }
+
+  test("returns 3 code actions for a diagnostic with a fix hint", () => {
     const diag = diagWithHint("Apply Higham 2002 correction");
     const actions = provider.provideCodeActions(
       mockDocument(),
       dummyRange,
       { diagnostics: [diag], only: undefined, triggerKind: 1 } as unknown as vscode.CodeActionContext,
     );
-    expect(actions).toHaveLength(1);
+    // Guard + AI explain + comment hint
+    expect(actions).toHaveLength(3);
   });
 
-  test("action title contains the fix hint text", () => {
+  test("guard action title is 'Apply Mathematical Guard'", () => {
+    const diag = diagWithHint("Fix PSD");
+    const actions = provider.provideCodeActions(
+      mockDocument(),
+      dummyRange,
+      { diagnostics: [diag], only: undefined, triggerKind: 1 } as unknown as vscode.CodeActionContext,
+    );
+    const guard = getAction(actions, "Apply Mathematical Guard");
+    expect(guard.title).toContain("Apply Mathematical Guard");
+  });
+
+  test("guard action is isPreferred=true", () => {
+    const diag = diagWithHint("Fix PSD");
+    const actions = provider.provideCodeActions(
+      mockDocument(),
+      dummyRange,
+      { diagnostics: [diag], only: undefined, triggerKind: 1 } as unknown as vscode.CodeActionContext,
+    );
+    const guard = getAction(actions, "Apply Mathematical Guard");
+    expect(guard.isPreferred).toBe(true);
+  });
+
+  test("guard action carries a command with the correct uri and failure type", () => {
+    const diag = diagWithHint("Fix PSD");
+    const actions = provider.provideCodeActions(
+      mockDocument(),
+      dummyRange,
+      { diagnostics: [diag], only: undefined, triggerKind: 1 } as unknown as vscode.CodeActionContext,
+    );
+    const guard = getAction(actions, "Apply Mathematical Guard");
+    expect(guard.command?.command).toBe("blackswan.applyGuard");
+    expect(guard.command?.arguments?.[0]).toEqual(TEST_URI);
+  });
+
+  test("AI explain action carries the explainPayload as its argument", () => {
+    const diag = diagWithHint("Fix PSD");
+    const actions = provider.provideCodeActions(
+      mockDocument(),
+      dummyRange,
+      { diagnostics: [diag], only: undefined, triggerKind: 1 } as unknown as vscode.CodeActionContext,
+    );
+    const explain = getAction(actions, "Explain with BlackSwan AI");
+    expect(explain.command?.command).toBe("blackswan.explainWithAI");
+    const payload = explain.command?.arguments?.[0];
+    expect(payload).toHaveProperty("failure_type");
+    expect(payload).toHaveProperty("causal_chain");
+  });
+
+  test("comment hint action title contains 'Insert Fix Hint Comment'", () => {
     const diag = diagWithHint("Clamp eigenvalues to epsilon");
-    const [action] = provider.provideCodeActions(
+    const actions = provider.provideCodeActions(
       mockDocument(),
       dummyRange,
       { diagnostics: [diag], only: undefined, triggerKind: 1 } as unknown as vscode.CodeActionContext,
     );
-    expect(action.title).toContain("Clamp eigenvalues to epsilon");
+    const hint = getAction(actions, "Insert Fix Hint Comment");
+    expect(hint.title).toContain("Insert Fix Hint Comment");
   });
 
-  test("action title starts with 'BlackSwan Fix Hint:'", () => {
-    const diag = diagWithHint("Some hint");
-    const [action] = provider.provideCodeActions(
-      mockDocument(),
-      dummyRange,
-      { diagnostics: [diag], only: undefined, triggerKind: 1 } as unknown as vscode.CodeActionContext,
-    );
-    expect(action.title).toMatch(/^BlackSwan Fix Hint:/);
-  });
-
-  test("action.edit inserts a comment at the start of the failing line", () => {
+  test("comment hint action.edit inserts a comment at the start of the failing line", () => {
     const diag = diagWithHint("Apply nearest-PSD correction");
-    const [action] = provider.provideCodeActions(
+    const actions = provider.provideCodeActions(
       mockDocument("    cov_matrix = x"),
       dummyRange,
       { diagnostics: [diag], only: undefined, triggerKind: 1 } as unknown as vscode.CodeActionContext,
     );
-    const edit = action.edit as unknown as {
+    const hint = getAction(actions, "Insert Fix Hint Comment");
+    const edit = hint.edit as unknown as {
       getInserts(): Array<{ uri: vscode.Uri; position: vscode.Position; text: string }>;
     };
     const inserts = edit.getInserts();
@@ -473,36 +521,40 @@ describe("BlackSwanCodeActionProvider", () => {
 
   test("inserted comment preserves line indentation", () => {
     const diag = diagWithHint("Some fix");
-    const [action] = provider.provideCodeActions(
+    const actions = provider.provideCodeActions(
       mockDocument("        deeply_indented = True"),
       dummyRange,
       { diagnostics: [diag], only: undefined, triggerKind: 1 } as unknown as vscode.CodeActionContext,
     );
-    const edit = action.edit as unknown as {
+    const hint = getAction(actions, "Insert Fix Hint Comment");
+    const edit = hint.edit as unknown as {
       getInserts(): Array<{ uri: vscode.Uri; position: vscode.Position; text: string }>;
     };
     const [insert] = edit.getInserts();
     expect(insert.text).toMatch(/^        # BlackSwan/);
   });
 
-  test("action.isPreferred is false (hint requires human judgment)", () => {
+  test("comment hint action.isPreferred is false", () => {
     const diag = diagWithHint("Some fix");
-    const [action] = provider.provideCodeActions(
+    const actions = provider.provideCodeActions(
       mockDocument(),
       dummyRange,
       { diagnostics: [diag], only: undefined, triggerKind: 1 } as unknown as vscode.CodeActionContext,
     );
-    expect(action.isPreferred).toBe(false);
+    const hint = getAction(actions, "Insert Fix Hint Comment");
+    expect(hint.isPreferred).toBe(false);
   });
 
-  test("action.diagnostics references the source diagnostic", () => {
+  test("all actions reference the source diagnostic", () => {
     const diag = diagWithHint("Some fix");
-    const [action] = provider.provideCodeActions(
+    const actions = provider.provideCodeActions(
       mockDocument(),
       dummyRange,
       { diagnostics: [diag], only: undefined, triggerKind: 1 } as unknown as vscode.CodeActionContext,
     );
-    expect(action.diagnostics).toContain(diag);
+    for (const action of actions) {
+      expect(action.diagnostics).toContain(diag);
+    }
   });
 
   test("returns no actions when diagnostic has no fix hint", () => {
@@ -526,6 +578,15 @@ describe("BlackSwanCodeActionProvider", () => {
     (foreignDiag as vscode.Diagnostic & { data?: DiagnosticFixData }).data = {
       shatterPointId: "sp_999",
       fixHint: "This should be ignored",
+      failureType: "non_psd_matrix",
+      line: 10,
+      explainPayload: {
+        failure_type: "non_psd_matrix",
+        message: "ignored",
+        frequency: "1 / 1",
+        fix_hint: "This should be ignored",
+        causal_chain: [],
+      },
     };
     const actions = provider.provideCodeActions(
       mockDocument(),
@@ -548,7 +609,9 @@ describe("BlackSwanCodeActionProvider", () => {
       dummyRange,
       { diagnostics: [blackSwanDiag, pylintDiag], only: undefined, triggerKind: 1 } as unknown as vscode.CodeActionContext,
     );
-    expect(actions).toHaveLength(1);
+    // The BlackSwan diagnostic produces 3 actions (guard + AI + comment hint);
+    // the Pylint diagnostic is ignored.
+    expect(actions).toHaveLength(3);
   });
 
   test("providedCodeActionKinds declares QuickFix", () => {
