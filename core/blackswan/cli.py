@@ -39,6 +39,10 @@ def main() -> None:
         parser.print_help(sys.stderr)
         sys.exit(2)
 
+    if args.command == "fix":
+        _cmd_fix(args)
+        return
+
     _cmd_test(args)
 
 
@@ -132,6 +136,21 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    # ── fix subcommand ──────────────────────────────────────────────────────
+    fix_p = subparsers.add_parser(
+        "fix",
+        help="Insert a deterministic mathematical guard at a detected failure line.",
+    )
+    fix_p.add_argument("file", help="Path to the Python file to fix.")
+    fix_p.add_argument(
+        "--line", type=int, required=True, metavar="N",
+        help="1-indexed line number of the detected failure.",
+    )
+    fix_p.add_argument(
+        "--type", dest="failure_type", required=True,
+        help="BlackSwan failure type (e.g. division_instability, non_psd_matrix).",
+    )
+
     return parser
 
 
@@ -147,6 +166,16 @@ def _cmd_list_scenarios() -> None:
             print(f"{name:<28} {scenario.description}")
         except Exception:
             print(name)
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: fix
+# ---------------------------------------------------------------------------
+
+def _cmd_fix(args: argparse.Namespace) -> None:
+    """Delegate to fixer.guards.cli_main and exit with its return code."""
+    from .fixer.guards import cli_main as fixer_main
+    sys.exit(fixer_main([args.file, "--line", str(args.line), "--type", args.failure_type]))
 
 
 # ---------------------------------------------------------------------------
