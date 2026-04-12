@@ -84,8 +84,8 @@
         },
         "blackswan.geminiModel": {
           "type": "string",
-          "default": "gemini-2.0-flash",
-          "markdownDescription": "Gemini model used for AI failure explanations. Defaults to `gemini-2.0-flash` (free tier, 15 RPM). Run `BlackSwan: Set Gemini API Key` to configure your key."
+          "default": "gemini-2.5-flash",
+          "markdownDescription": "Gemini model used for AI failure explanations. Defaults to `gemini-2.5-flash` (free tier, 15 RPM). Run `BlackSwan: Set Gemini API Key` to configure your key."
         }
       }
     }

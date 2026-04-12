@@ -93,7 +93,7 @@ interface GeminiResponse {
 }
 
 async function callGeminiDirect(prompt: string): Promise<string> {
-  const model = "gemini-2.0-flash";
+  const model = "gemini-2.5-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
 
   const response = await fetch(url, {
@@ -101,7 +101,11 @@ async function callGeminiDirect(prompt: string): Promise<string> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: 512, temperature: 0.2 },
+      generationConfig: {
+        maxOutputTokens: 1024,
+        temperature: 0.2,
+        thinkingConfig: { thinkingBudget: 0 },
+      },
     }),
   });
 

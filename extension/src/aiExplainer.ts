@@ -156,11 +156,11 @@ export async function explainFailure(
 
 /**
  * Read the configured Gemini model name from VS Code settings.
- * Falls back to gemini-2.0-flash (15 RPM free tier).
+ * Falls back to gemini-2.5-flash (15 RPM free tier).
  */
 function _resolveModel(): string {
   const cfg = vscode.workspace.getConfiguration("blackswan");
-  return cfg.get<string>("geminiModel") ?? "gemini-2.0-flash";
+  return cfg.get<string>("geminiModel") ?? "gemini-2.5-flash";
 }
 
 /**
@@ -205,7 +205,11 @@ async function _callGemini(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: 512, temperature: 0.2 },
+      generationConfig: {
+        maxOutputTokens: 1024,
+        temperature: 0.2,
+        thinkingConfig: { thinkingBudget: 0 },
+      },
     }),
   });
 
