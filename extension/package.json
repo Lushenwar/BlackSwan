@@ -32,13 +32,29 @@
   },
   "main": "./out/src/extension.js",
   "activationEvents": [
-    "onLanguage:python"
+    "onLanguage:python",
+    "onStartupFinished"
   ],
   "contributes": {
     "commands": [
       {
         "command": "blackswan.runStressTest",
         "title": "Run BlackSwan Stress Test",
+        "category": "BlackSwan"
+      },
+      {
+        "command": "blackswan.setApiKey",
+        "title": "Set Gemini API Key",
+        "category": "BlackSwan"
+      },
+      {
+        "command": "blackswan.applyGuard",
+        "title": "Apply Mathematical Guard",
+        "category": "BlackSwan"
+      },
+      {
+        "command": "blackswan.explainWithAI",
+        "title": "Explain with BlackSwan AI",
         "category": "BlackSwan"
       }
     ],
@@ -65,6 +81,11 @@
           "minimum": 1,
           "default": null,
           "markdownDescription": "Hard time limit in seconds. The engine stops after this many seconds even if not all iterations have completed. Leave empty for no limit."
+        },
+        "blackswan.geminiModel": {
+          "type": "string",
+          "default": "gemini-2.0-flash",
+          "markdownDescription": "Gemini model used for AI failure explanations. Defaults to `gemini-2.0-flash` (free tier, 15 RPM). Run `BlackSwan: Set Gemini API Key` to configure your key."
         }
       }
     }

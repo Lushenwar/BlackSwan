@@ -384,6 +384,7 @@ export const window = {
   showWarningMessage:     jest.fn(),
   showErrorMessage:       jest.fn(),
   showQuickPick:          jest.fn(),
+  showInputBox:           jest.fn(),
 
   createWebviewPanel: jest.fn(
     (viewType: string, title: string, _column: unknown, _options?: unknown) =>

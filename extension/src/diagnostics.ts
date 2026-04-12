@@ -13,10 +13,12 @@
 import * as vscode from "vscode";
 import {
   BlackSwanResponse,
+  CausalChainLink,
   FailureType,
   Severity,
   ShatterPoint,
 } from "./types";
+import { ExplainPayload } from "./aiExplainer";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -40,11 +42,21 @@ const FAILURE_TYPE_LABELS: Record<FailureType, string> = {
 
 /**
  * Data payload attached to diagnostics that have a fix_hint.
- * Read by BlackSwanCodeActionProvider to surface the Quick Fix.
+ * Read by BlackSwanCodeActionProvider to surface Quick Fix actions.
+ *
+ * Includes all fields needed by both the AI explainer and the deterministic fixer:
+ *   - failureType + line → passed to blackswan.applyGuard
+ *   - explainPayload     → passed to blackswan.explainWithAI
  */
 export interface DiagnosticFixData {
   shatterPointId: string;
   fixHint: string;
+  /** The failure type — used to select the correct guard pattern in the fixer. */
+  failureType: FailureType;
+  /** 1-indexed source line of the failure (null when attribution was not available). */
+  line: number | null;
+  /** Full payload for the AI explainer — never includes raw source code. */
+  explainPayload: ExplainPayload;
 }
 
 // Internal type alias so we can attach data without widening the public API.
@@ -138,12 +150,21 @@ export function shatterPointToDiagnostic(
     });
   }
 
-  // Attach fix_hint as a structured data payload.
-  // BlackSwanCodeActionProvider reads this to build the Quick Fix action.
+  // Attach fix_hint and all metadata needed by the Quick Fix actions.
+  // BlackSwanCodeActionProvider reads this to build both the AI and deterministic actions.
   if (sp.fix_hint) {
     diagnostic.data = {
       shatterPointId: sp.id,
       fixHint: sp.fix_hint,
+      failureType: sp.failure_type,
+      line: sp.line,
+      explainPayload: {
+        failure_type: sp.failure_type,
+        message: sp.message,
+        frequency: sp.frequency,
+        fix_hint: sp.fix_hint,
+        causal_chain: sp.causal_chain,
+      },
     };
   }
 
@@ -169,15 +190,20 @@ export function buildDiagnostics(
 // ---------------------------------------------------------------------------
 
 /**
- * Provides a Quick Fix code action for every BlackSwan diagnostic that
- * carries a non-empty fix_hint.
+ * Provides Quick Fix code actions for every BlackSwan diagnostic that
+ * carries a non-empty fix_hint.  Three actions are offered per diagnostic:
  *
- * The action inserts a comment above the failing line:
- *   # BlackSwan Fix Hint: <hint text>
+ *   1. "$(shield) Apply Mathematical Guard"
+ *      Spawns the Python fixer, shows a diff, and applies via WorkspaceEdit.
+ *      Registered as command `blackswan.applyGuard`.
  *
- * A comment is used intentionally: fix hints require human judgment (e.g.,
- * "apply Higham 2002 nearest-PSD correction") — auto-editing the code would
- * be unsafe. The comment prompts the developer without making assumptions.
+ *   2. "$(sparkle) Explain with BlackSwan AI"
+ *      Calls the Gemini Flash API to explain the failure.  Requires a key set
+ *      via `blackswan.setApiKey`.  Registered as command `blackswan.explainWithAI`.
+ *
+ *   3. "$(comment) Insert Fix Hint Comment"
+ *      Inserts the engine's fix_hint as a code comment above the failing line.
+ *      No external calls — always available as a fallback.
  */
 export class BlackSwanCodeActionProvider implements vscode.CodeActionProvider {
   static readonly providedCodeActionKinds = [vscode.CodeActionKind.QuickFix];
@@ -194,30 +220,57 @@ export class BlackSwanCodeActionProvider implements vscode.CodeActionProvider {
       const withHint = diag as DiagnosticWithHint;
       if (!withHint.data?.fixHint) continue;
 
-      const hint = withHint.data.fixHint;
-      const action = new vscode.CodeAction(
-        `BlackSwan Fix Hint: ${hint}`,
+      const data = withHint.data;
+
+      // ── Action 1: Deterministic guard (preferred) ─────────────────────────
+      if (data.line !== null) {
+        const guardAction = new vscode.CodeAction(
+          "$(shield) Apply Mathematical Guard",
+          vscode.CodeActionKind.QuickFix,
+        );
+        guardAction.diagnostics = [diag];
+        guardAction.isPreferred = true;
+        guardAction.command = {
+          command: "blackswan.applyGuard",
+          title: "Apply Mathematical Guard",
+          arguments: [document.uri, data.line, data.failureType],
+        };
+        actions.push(guardAction);
+      }
+
+      // ── Action 2: AI explanation ──────────────────────────────────────────
+      const explainAction = new vscode.CodeAction(
+        "$(sparkle) Explain with BlackSwan AI",
         vscode.CodeActionKind.QuickFix,
       );
-      action.diagnostics = [diag];
-      // isPreferred = false: this is a suggestion, not a safe auto-fix.
-      action.isPreferred = false;
+      explainAction.diagnostics = [diag];
+      explainAction.isPreferred = false;
+      explainAction.command = {
+        command: "blackswan.explainWithAI",
+        title: "Explain with BlackSwan AI",
+        arguments: [data.explainPayload],
+      };
+      actions.push(explainAction);
 
-      // Detect indentation of the failing line and match it in the comment.
+      // ── Action 3: Fallback comment hint ───────────────────────────────────
+      const commentAction = new vscode.CodeAction(
+        "$(comment) Insert Fix Hint Comment",
+        vscode.CodeActionKind.QuickFix,
+      );
+      commentAction.diagnostics = [diag];
+      commentAction.isPreferred = false;
+
       const targetLine = diag.range.start.line;
       const lineText = document.lineAt(targetLine).text;
       const indentMatch = lineText.match(/^(\s*)/);
       const indent = indentMatch ? indentMatch[1] : "";
-      const commentText = `${indent}# BlackSwan Fix Hint: ${hint}\n`;
-
-      action.edit = new vscode.WorkspaceEdit();
-      action.edit.insert(
+      commentAction.edit = new vscode.WorkspaceEdit();
+      commentAction.edit.insert(
         document.uri,
         new vscode.Position(targetLine, 0),
-        commentText,
+        `${indent}# BlackSwan Fix Hint: ${data.fixHint}\n`,
       );
-
-      actions.push(action);
+      actions.push(commentAction);
     }
 
     return actions;
