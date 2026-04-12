@@ -26,7 +26,11 @@ BlackSwan is two independent systems connected by a versioned JSON contract.
 core/blackswan/
 ├── __init__.py
 ├── __main__.py
-├── cli.py                    # argparse CLI, entry point
+├── cli.py                    # argparse CLI, entry point (test + fix subcommands)
+│
+├── fixer/
+│   ├── __init__.py
+│   └── guards.py             # apply_fix() — libcst CST rewriter for 4 guard patterns
 │
 ├── engine/
 │   ├── runner.py             # StressRunner — Monte Carlo loop
@@ -193,12 +197,14 @@ Each perturbation entry may define `constraints.min` / `constraints.max` to clam
 extension/src/
 ├── extension.ts        # Activation, command registration, wires all components
 ├── bridge.ts           # Spawns Python child_process, stdin/stdout JSON protocol
-├── diagnostics.ts      # DiagnosticsController — shatter_points → vscode.Diagnostic[]
+├── diagnostics.ts      # DiagnosticsController — shatter_points → vscode.Diagnostic[] + 3 CodeActions
 ├── codelens.ts         # BlackSwanCodeLensProvider + scanForTargets() pure function
 ├── hover.ts            # BlackSwanHoverProvider — rich tooltips with causal chain
 ├── progress.ts         # ProgressSession wrapping vscode.withProgress
 ├── orchestrator.ts     # Run mutex, progress wiring, error routing
-├── dagPanel.ts         # DagPanelController — builds DAG webview from response; pure-SVG rendering, dark fintech theme, KPI strip, slide-in detail drawer
+├── fixer.ts            # applyMathGuard() — diff preview, WorkspaceEdit; BlackSwanPreviewProvider
+├── aiExplainer.ts      # explainFailure() — Gemini BYOK, rate limiter, privacy-safe prompts
+├── dagPanel.ts         # DagPanelController — pure-SVG DAG, dark fintech theme, KPI strip, detail drawer
 └── types.ts            # EngineRuntimeError, EngineFrameworkError, EngineProtocolError
 ```
 
@@ -222,7 +228,7 @@ bridge.runBlackSwanEngine(fsPath, scenarioName, options)
 DiagnosticsController.apply(document, response)
         │  shatter_points → vscode.Diagnostic (red squiggles)
         │  causal_chain   → relatedInformation (clickable upstream lines)
-        │  fix_hint       → CodeAction (Quick Fix)
+        │  3 CodeActions per diagnostic (see Auto-Fixer below)
         ▼
 BlackSwanHoverProvider.set(uri, shatter_points)
         │  stores tooltips keyed by line number
@@ -231,6 +237,66 @@ DagPanelController.show(response, uri)
         │  opens/updates webview with pure-SVG DAG (manual layout, no D3/Dagre)
         │  failure_site = red (glow), intermediate = orange, root_input = yellow
 ```
+
+---
+
+### Hybrid Auto-Fixer
+
+Every diagnostic exposes three CodeActions via `BlackSwanCodeActionProvider`:
+
+```
+User clicks lightbulb (Quick Fix)
+        │
+        ├─► "Apply Mathematical Guard"  (isPreferred: true)
+        │         │
+        │         ▼
+        │   blackswan.applyGuard(uri, line, failureType)
+        │         │
+        │         ▼
+        │   applyMathGuard() in fixer.ts
+        │         │  spawns: python -m blackswan fix <file> --line N --type T
+        │         │  parses JSON: { status, line, original, replacement, extra_lines }
+        │         │  sets BlackSwanPreviewProvider content (blackswan-preview:// URI)
+        │         │  vscode.diff — side-by-side preview
+        │         │  user confirms → WorkspaceEdit.replace() + optional insert()
+        │         └─ fully undoable via Ctrl+Z
+        │
+        ├─► "Explain with BlackSwan AI"
+        │         │
+        │         ▼
+        │   blackswan.explainWithAI(explainPayload)
+        │         │
+        │         ▼
+        │   explainFailure() in aiExplainer.ts
+        │         │  reads API key from VS Code SecretStorage (never settings/source)
+        │         │  rate-limit check: 15 RPM sliding window
+        │         │  builds prompt from metadata only (no source code)
+        │         │  POST to Gemini REST API (gemini-2.5-flash, thinkingBudget: 0)
+        │         └─ opens Markdown virtual document beside active editor
+        │
+        └─► "Insert comment hint"
+                  │  edit-based — indented # BlackSwan Fix Hint: comment
+                  └─ no subprocess, no API call
+```
+
+**Fixer CLI** (standalone, no VS Code):
+
+```bash
+python -m blackswan fix models/risk.py --line 36 --type non_psd_matrix
+```
+
+Returns JSON: `{ "status": "ok", "line": 36, "original": "...", "replacement": "...", "extra_lines": [...], "explanation": "..." }`
+
+**Guard patterns** (`core/blackswan/fixer/guards.py`, powered by `libcst`):
+
+| failure_type | Strategy |
+|---|---|
+| `division_instability` | Replace denominator with `max(denom, 1e-10)` |
+| `non_psd_matrix` | Append eigenvalue clamp via `np.linalg.eigh` + `np.maximum` |
+| `ill_conditioned_matrix` | Replace `np.linalg.inv(M)` with conditional `pinv` when `cond > 1e12` |
+| `nan_inf` | Append `np.nan_to_num(result, posinf=…, neginf=…)` |
+
+**Privacy contract:** `aiExplainer.ts` sends only `ExplainPayload` fields to Gemini — failure type, engine message, frequency, fix hint, and causal chain variable names with line numbers. Raw source code is never transmitted.
 
 ### Python Path Resolution
 
@@ -329,3 +395,8 @@ Every engine response is validated against `contract/schema.json` before being r
 | GA crossover is 50/50 per-param coin flip | Simple and sufficient. Arithmetic crossover adds complexity for marginal gain at this scale. |
 | Validator skips (not raises) on invalid inputs | Invalid inputs are physically impossible, not failures. Skipping prevents false positives. |
 | baseline_established in RunResult | Makes baseline failure observable to callers without raising from the runner constructor. |
+| libcst for fixer (not ast + astor) | libcst is a Concrete Syntax Tree — it preserves formatting, comments, and whitespace exactly. ast round-trips lose indentation and blank lines. |
+| Fixer sends replacement/extra_lines separately | The extension can apply replacement in-place and insert extra_lines after — avoids rewriting multi-line blocks from scratch. |
+| Gemini BYOK via SecretStorage | API keys must never appear in settings.json (world-readable). SecretStorage is OS-encrypted. |
+| thinkingBudget: 0 on Gemini 2.5 flash | Gemini 2.5 flash is a reasoning model. Without this flag, internal thinking consumes most of the output token budget, truncating the response. |
+| Privacy: no source code in AI prompts | Source code may contain proprietary logic. Only structural metadata (failure type, variable names, line numbers) is transmitted. |

@@ -59,6 +59,8 @@ python -m blackswan test models/risk.py --scenario liquidity_crash
 
 ## CLI Reference
 
+### `test` — stress-test a model
+
 ```
 python -m blackswan test <file> [options]
 
@@ -72,6 +74,39 @@ Options:
 ```
 
 **Exit codes:** `0` = no failures, `1` = failures detected, `2` = engine error.
+
+### `fix` — generate a deterministic guard for a failure line
+
+```
+python -m blackswan fix <file> --line N --type TYPE
+```
+
+Requires `pip install blackswan[fixer]` (adds `libcst`).
+
+| `--type` | Guard applied |
+|---|---|
+| `division_instability` | `max(denominator, 1e-10)` epsilon clamp |
+| `non_psd_matrix` | Nearest-PSD correction via `np.linalg.eigh` + `np.maximum` |
+| `ill_conditioned_matrix` | Conditional `np.linalg.pinv` fallback when `cond > 1e12` |
+| `nan_inf` | `np.nan_to_num(result, posinf=…, neginf=…)` guard |
+
+Output JSON:
+
+```json
+{
+  "status": "ok",
+  "line": 36,
+  "original": "    cov_matrix = np.cov(returns.T)",
+  "replacement": "    cov_matrix = np.cov(returns.T)",
+  "extra_lines": [
+    "    vals, vecs = np.linalg.eigh(cov_matrix)",
+    "    cov_matrix = vecs @ np.diag(np.maximum(vals, 1e-10)) @ vecs.T"
+  ],
+  "explanation": "Clamps negative eigenvalues to epsilon, restoring PSD property."
+}
+```
+
+`status` is `"ok"`, `"error"`, or `"unsupported"`. Exit code is always `0` (the caller decides what to do with the result).
 
 ### Available Scenarios
 

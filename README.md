@@ -64,6 +64,12 @@ $ python -m blackswan test models/risk.py --scenario liquidity_crash
 pip install blackswan
 ```
 
+With the mathematical auto-fixer (requires `libcst`):
+
+```bash
+pip install blackswan[fixer]
+```
+
 Requires Python 3.11+.
 
 ### VS Code Extension
@@ -72,11 +78,11 @@ Requires Python 3.11+.
   <img src="extension/media/logo.png" width="120" alt="BlackSwan extension icon" />
 </p>
 
-**v0.3.0** — Download [`blackswan-vscode-0.3.0.vsix`](https://github.com/Lushenwar/BlackSwan/releases/latest) from Releases and install it manually:
+**v0.4.0** — Download [`blackswan-vscode-0.4.0.vsix`](https://github.com/Lushenwar/BlackSwan/releases/latest) from Releases and install it manually:
 
 
 ```bash
-code --install-extension blackswan-vscode-0.3.0.vsix
+code --install-extension blackswan-vscode-0.4.0.vsix
 ```
 
 Or: **Extensions** panel → `···` menu → **Install from VSIX…**
@@ -94,7 +100,8 @@ Once installed, open any Python file containing numerical logic and click **▶ 
 3. Select a preset stress scenario from the dropdown
 4. Watch the progress bar — failures appear as red squiggles with hover tooltips
 5. Click any squiggle to see the failure type, frequency, and a full causal chain in the hover tooltip
-6. Open the **BlackSwan DAG** panel to explore the dependency graph — failure site nodes glow red, propagation nodes orange, root inputs yellow
+6. Use the lightbulb Quick Fix menu on any squiggle to access the **Hybrid Auto-Fixer**
+7. Open the **BlackSwan DAG** panel to explore the dependency graph — failure site nodes glow red, propagation nodes orange, root inputs yellow
 
 **Settings** (`Ctrl+,` → search "BlackSwan"):
 
@@ -103,6 +110,46 @@ Once installed, open any Python file containing numerical logic and click **▶ 
 | `blackswan.pythonPath` | _(auto)_ | Python executable path. Falls back to the Python extension's interpreter. |
 | `blackswan.mode` | `fast` | `fast` for responsive IDE feedback; `full` for verified attribution. |
 | `blackswan.maxRuntimeSec` | _(none)_ | Hard time cap in seconds. Engine stops early if exceeded. |
+| `blackswan.geminiModel` | `gemini-2.5-flash` | Gemini model used for AI failure explanations. Run **BlackSwan: Set Gemini API Key** to configure your key. |
+
+### Auto-Fixer
+
+Every red squiggle has three Quick Fix options in the lightbulb menu:
+
+| Action | What it does |
+|---|---|
+| **Apply Mathematical Guard** | Rewrites the failing line using a deterministic libcst guard (epsilon clamp, PSD correction, conditional `pinv`, or `nan_to_num`). Shows a side-by-side diff before applying — fully undoable. |
+| **Explain with BlackSwan AI** | Sends the failure metadata (type, frequency, causal chain, fix hint — never source code) to Gemini and displays a plain-English explanation in a side panel. |
+| **Insert comment hint** | Adds an indented `# BlackSwan Fix Hint:` comment directly below the failing line — no subprocess, no API. |
+
+**Supported guard types:**
+
+| Failure type | Guard applied |
+|---|---|
+| `division_instability` | `max(denominator, 1e-10)` epsilon clamp |
+| `non_psd_matrix` | Higham 2002 nearest-PSD via `np.linalg.eigh` + `np.maximum` |
+| `ill_conditioned_matrix` | Conditional `np.linalg.pinv` fallback when `cond > 1e12` |
+| `nan_inf` | `np.nan_to_num(result, posinf=…, neginf=…)` guard |
+
+**Fixer CLI** (also available standalone):
+
+```bash
+# Install the fixer extra
+pip install blackswan[fixer]
+
+# Get a JSON fix proposal for any line
+python -m blackswan fix models/risk.py --line 36 --type non_psd_matrix
+```
+
+**AI explanations (BYOK):**
+
+1. Run the command **BlackSwan: Set Gemini API Key** from the Command Palette (`Ctrl+Shift+P`)
+2. Paste your [Gemini API key](https://aistudio.google.com/app/apikey) — stored encrypted in VS Code's SecretStorage, never in settings or source
+3. Click **Explain with BlackSwan AI** on any failure
+
+Rate limit: 15 requests per minute (Gemini free tier). The extension enforces this in-process.
+
+---
 
 ### CLI
 

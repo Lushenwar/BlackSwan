@@ -29,7 +29,18 @@ cd core
 pip install -e ".[dev]"
 ```
 
-This installs `blackswan` as an editable package plus `pytest` and `pytest-cov`.
+This installs `blackswan` as an editable package plus `pytest`, `pytest-cov`, and `libcst` (required for the mathematical auto-fixer).
+
+### 3a. (Optional) Configure AI explanations
+
+Copy the env template and add your Gemini key:
+
+```bash
+cp .env.example .env
+# edit .env and set GEMINI_API_KEY=AIza...
+```
+
+The `.env` file is in `.gitignore` and will never be committed. The key is only used by integration tests — in the VS Code extension it is stored via the **BlackSwan: Set Gemini API Key** command.
 
 ### 3. Install the extension dependencies
 
@@ -104,6 +115,7 @@ BlackSwan/
 │   ├── blackswan/
 │   │   ├── engine/        # StressRunner, EvolutionaryStressRunner, perturbation, validator
 │   │   ├── detectors/     # FailureDetector subclasses
+│   │   ├── fixer/         # libcst-based mathematical guard rewriter
 │   │   ├── parser/        # AST analysis, dependency graph
 │   │   ├── scenarios/     # Scenario dataclasses, YAML loading, presets
 │   │   └── attribution/   # Traceback + causal chain
@@ -112,8 +124,11 @@ BlackSwan/
 │   └── pyproject.toml
 ├── extension/             # VS Code extension (TypeScript)
 │   ├── src/
+│   │   ├── fixer.ts       # Diff preview + WorkspaceEdit guard application
+│   │   └── aiExplainer.ts # Gemini BYOK AI explanations
 │   └── package.json
 ├── docs/                  # Architecture, scenarios, contributing
+├── .env.example           # Copy to .env and add GEMINI_API_KEY for integration tests
 ├── CHANGELOG.md
 └── CLAUDE.md              # Authoritative engineering guide
 ```
@@ -135,6 +150,12 @@ BlackSwan/
 - **The extension renders; the engine computes.** Never hardcode or mock shatter points in the extension.
 - **Keep the bridge thin.** `bridge.ts` spawns a process and parses JSON. Business logic belongs in the engine.
 - **Every diagnostic must answer five questions:** what failed, how often, under what conditions, on which line, caused by which input. If it can't, it's not ready to ship.
+
+### Auto-Fixer (Python + TypeScript)
+
+- **libcst only for the fixer.** AST + astor lose formatting; libcst preserves it exactly.
+- **Never transmit source code to the AI.** `aiExplainer.ts` sends only `ExplainPayload` metadata — failure type, message, frequency, fix hint, and causal chain variable names. Raw source stays local.
+- **Keys via SecretStorage only.** Never read or write a Gemini API key from `settings.json` or any file that could be committed.
 
 ### Both
 
