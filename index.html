@@ -1,0 +1,1648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BlackSwan — Mathematical Fragility Debugger for Python</title>
+  <meta name="description" content="BlackSwan stress-tests financial and numerical Python code under extreme market conditions, then pinpoints the exact line where your model breaks — and why.">
+  <meta property="og:title" content="BlackSwan — Mathematical Fragility Debugger">
+  <meta property="og:description" content="Find the exact line where your risk model fails under extreme conditions. pip install blackswan">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://lushenwar.github.io/BlackSwan">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="BlackSwan — Mathematical Fragility Debugger">
+  <meta name="twitter:description" content="Find the exact line where your risk model fails. pip install blackswan">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    /* ── Design Tokens ────────────────────────────────────── */
+    :root {
+      --bg-deep:      #070B14;
+      --bg-surface:   #0D1426;
+      --bg-elevated:  #141D35;
+      --bg-code:      #0A1020;
+      --border:       rgba(255,255,255,0.07);
+      --border-mid:   rgba(255,255,255,0.12);
+      --text-1:       #F1F5F9;
+      --text-2:       #8B9AB4;
+      --text-3:       #4B5878;
+      --red:          #EF3B3B;
+      --red-dim:      rgba(239,59,59,0.15);
+      --red-bright:   #FF5555;
+      --green:        #22C55E;
+      --green-dim:    rgba(34,197,94,0.12);
+      --amber:        #F59E0B;
+      --amber-dim:    rgba(245,158,11,0.12);
+      --blue:         #60A5FA;
+      --purple:       #A78BFA;
+      --ff-display:   'Instrument Serif', Georgia, serif;
+      --ff-sans:      'IBM Plex Sans', system-ui, sans-serif;
+      --ff-mono:      'JetBrains Mono', 'Fira Code', monospace;
+      --radius-sm:    4px;
+      --radius-md:    8px;
+      --radius-lg:    12px;
+      --shadow-sm:    0 1px 3px rgba(7,11,20,0.6);
+      --shadow-md:    0 4px 16px rgba(7,11,20,0.8);
+      --shadow-lg:    0 16px 48px rgba(7,11,20,0.9);
+      --transition:   150ms ease-out;
+      --transition-md: 250ms ease-out;
+    }
+
+    /* ── Typography ───────────────────────────────────────── */
+    body {
+      font-family: var(--ff-sans);
+      font-size: 16px;
+      line-height: 1.65;
+      color: var(--text-1);
+      background: var(--bg-deep);
+      overflow-x: hidden;
+    }
+
+    /* Dot-grid background — graph paper for quants */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: radial-gradient(circle, rgba(255,255,255,0.035) 1px, transparent 1px);
+      background-size: 28px 28px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    * { position: relative; z-index: 1; }
+
+    /* ── Layout Utilities ─────────────────────────────────── */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0,0,0,0);
+      white-space: nowrap;
+    }
+
+    /* ── Scroll Reveal ────────────────────────────────────── */
+    .reveal {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 500ms ease-out, transform 500ms ease-out;
+    }
+    .reveal.visible { opacity: 1; transform: none; }
+    .reveal-delay-1 { transition-delay: 80ms; }
+    .reveal-delay-2 { transition-delay: 160ms; }
+    .reveal-delay-3 { transition-delay: 240ms; }
+    .reveal-delay-4 { transition-delay: 320ms; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .reveal, .reveal.visible { opacity: 1; transform: none; transition: none; }
+      * { animation-duration: 0.01ms !important; animation-delay: 0ms !important; }
+    }
+
+    /* ── Navigation ───────────────────────────────────────── */
+    nav {
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      width: calc(100% - 48px);
+      max-width: 1200px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      background: rgba(13,20,38,0.82);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      color: var(--text-1);
+      font-family: var(--ff-mono);
+      font-weight: 600;
+      font-size: 15px;
+      letter-spacing: -0.02em;
+    }
+
+    .nav-logo-img {
+      width: 48px;
+      height: 48px;
+      border-radius: 6px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      display: block;
+      padding: 6px 12px;
+      color: var(--text-2);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      border-radius: var(--radius-sm);
+      transition: color var(--transition), background var(--transition);
+    }
+    .nav-links a:hover { color: var(--text-1); background: rgba(255,255,255,0.05); }
+    .nav-links a:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+
+    .nav-cta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 18px;
+      border-radius: var(--radius-sm);
+      font-family: var(--ff-sans);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all var(--transition);
+      border: none;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .btn:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+
+    .btn-primary {
+      background: var(--green);
+      color: #0A1A0F;
+    }
+    .btn-primary:hover { background: #1DAF4F; transform: translateY(-1px); }
+    .btn-primary:active { transform: none; }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-1);
+      border: 1px solid var(--border-mid);
+    }
+    .btn-ghost:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.2); }
+
+    .btn-large {
+      padding: 14px 28px;
+      font-size: 15px;
+    }
+
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      nav { padding: 10px 16px; }
+    }
+
+    /* ── Hero ─────────────────────────────────────────────── */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      padding: 120px 0 80px;
+    }
+
+    .hero-inner {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: center;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 12px 5px 8px;
+      background: var(--red-dim);
+      border: 1px solid rgba(239,59,59,0.25);
+      border-radius: 100px;
+      font-family: var(--ff-mono);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--red-bright);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 28px;
+    }
+    .hero-badge-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--red);
+      border-radius: 50%;
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.7); }
+    }
+
+    .hero-headline {
+      font-family: var(--ff-display);
+      font-size: clamp(40px, 5.5vw, 72px);
+      line-height: 1.08;
+      letter-spacing: -0.02em;
+      color: var(--text-1);
+      margin-bottom: 8px;
+    }
+
+    .hero-headline em {
+      font-style: italic;
+      color: var(--red);
+    }
+
+    .hero-headline-2 {
+      font-family: var(--ff-display);
+      font-size: clamp(40px, 5.5vw, 72px);
+      line-height: 1.08;
+      letter-spacing: -0.02em;
+      color: var(--text-2);
+      margin-bottom: 28px;
+    }
+
+    .hero-sub {
+      font-size: 18px;
+      line-height: 1.65;
+      color: var(--text-2);
+      max-width: 460px;
+      margin-bottom: 36px;
+    }
+
+    .hero-sub strong {
+      color: var(--text-1);
+      font-weight: 600;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 44px;
+    }
+
+    .hero-pip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      background: var(--bg-code);
+      border: 1px solid var(--border-mid);
+      border-radius: var(--radius-sm);
+      font-family: var(--ff-mono);
+      font-size: 14px;
+      color: var(--green);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .hero-pip:hover { border-color: rgba(34,197,94,0.3); background: rgba(34,197,94,0.05); }
+    .hero-pip-prompt { color: var(--text-3); user-select: none; }
+    .hero-pip-text { color: var(--green); user-select: all; }
+    .hero-pip-copy { color: var(--text-3); transition: color var(--transition); margin-left: 4px; }
+    .hero-pip:hover .hero-pip-copy { color: var(--text-2); }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    .hero-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 13px;
+      color: var(--text-3);
+    }
+    .hero-meta-item svg { flex-shrink: 0; }
+
+    /* ── Code Mockup ──────────────────────────────────────── */
+    .code-mockup {
+      background: var(--bg-code);
+      border: 1px solid var(--border-mid);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-lg), 0 0 0 1px rgba(239,59,59,0.1);
+      transform: perspective(1200px) rotateY(-4deg) rotateX(2deg);
+      transition: transform 400ms ease-out;
+    }
+    .code-mockup:hover {
+      transform: perspective(1200px) rotateY(-1deg) rotateX(0.5deg);
+    }
+
+    .mockup-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.03);
+      border-bottom: 1px solid var(--border);
+    }
+    .mockup-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .mockup-dot-r { background: #FF5F57; }
+    .mockup-dot-y { background: #FFBD2E; }
+    .mockup-dot-g { background: #28CA41; }
+    .mockup-title {
+      flex: 1;
+      text-align: center;
+      font-family: var(--ff-mono);
+      font-size: 11px;
+      color: var(--text-3);
+    }
+
+    .mockup-content {
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .code-editor {
+      display: flex;
+      font-family: var(--ff-mono);
+      font-size: 12.5px;
+      line-height: 1.7;
+    }
+
+    .line-numbers {
+      padding: 16px 12px;
+      background: rgba(0,0,0,0.2);
+      border-right: 1px solid var(--border);
+      color: var(--text-3);
+      text-align: right;
+      user-select: none;
+      flex-shrink: 0;
+      min-width: 40px;
+    }
+
+    .code-lines {
+      padding: 16px 20px;
+      overflow: auto;
+      flex: 1;
+    }
+
+    .code-line { display: block; white-space: pre; }
+    .code-line.highlight-red {
+      background: rgba(239,59,59,0.1);
+      margin: 0 -20px;
+      padding: 0 20px;
+      border-left: 2px solid var(--red);
+    }
+    .code-line.highlight-amber {
+      background: rgba(245,158,11,0.06);
+      margin: 0 -20px;
+      padding: 0 20px;
+    }
+
+    .tok-kw    { color: #C792EA; }
+    .tok-fn    { color: #82AAFF; }
+    .tok-var   { color: #A6ACCD; }
+    .tok-str   { color: #C3E88D; }
+    .tok-num   { color: #F78C6C; }
+    .tok-cmt   { color: #546E7A; font-style: italic; }
+    .tok-op    { color: #89DDFF; }
+    .tok-cls   { color: #FFCB6B; }
+
+    .squiggle {
+      text-decoration: underline wavy var(--red);
+      text-underline-offset: 2px;
+    }
+
+    .failure-tooltip {
+      display: block;
+      margin: 6px -20px 2px;
+      padding: 10px 20px;
+      background: rgba(239,59,59,0.08);
+      border: 1px solid rgba(239,59,59,0.2);
+      border-left: 3px solid var(--red);
+      border-radius: 0;
+      font-family: var(--ff-mono);
+      font-size: 11px;
+      line-height: 1.5;
+      white-space: normal;
+    }
+
+    .failure-tooltip-head {
+      color: var(--red);
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-size: 10px;
+      margin-bottom: 4px;
+    }
+    .failure-tooltip-body { color: var(--text-2); }
+    .failure-tooltip-freq {
+      margin-top: 4px;
+      color: var(--amber);
+      font-size: 10px;
+    }
+
+    @media (max-width: 1024px) {
+      .hero-inner { grid-template-columns: 1fr; gap: 48px; }
+      .code-mockup { transform: none; max-width: 560px; margin: 0 auto; }
+      .code-mockup:hover { transform: none; }
+    }
+
+    @media (max-width: 640px) {
+      .hero { padding: 100px 0 60px; }
+      .hero-headline, .hero-headline-2 { font-size: clamp(34px, 9vw, 48px); }
+      .hero-pip { font-size: 13px; }
+    }
+
+    /* ── Section Shared ───────────────────────────────────── */
+    section { padding: 100px 0; }
+
+    .section-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--ff-mono);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 20px;
+    }
+    .section-label::before {
+      content: '';
+      display: block;
+      width: 20px;
+      height: 1px;
+      background: var(--text-3);
+    }
+
+    .section-title {
+      font-family: var(--ff-display);
+      font-size: clamp(32px, 4vw, 52px);
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      color: var(--text-1);
+      margin-bottom: 16px;
+    }
+
+    .section-sub {
+      font-size: 17px;
+      line-height: 1.7;
+      color: var(--text-2);
+      max-width: 560px;
+    }
+
+    /* ── Terminal Demo ────────────────────────────────────── */
+    .terminal-section {
+      padding: 80px 0;
+    }
+
+    .terminal-header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .terminal-window {
+      background: var(--bg-code);
+      border: 1px solid var(--border-mid);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-lg);
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .terminal-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.03);
+      border-bottom: 1px solid var(--border);
+    }
+    .term-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .term-dot-r { background: #FF5F57; }
+    .term-dot-y { background: #FFBD2E; }
+    .term-dot-g { background: #28CA41; }
+    .terminal-title {
+      flex: 1;
+      text-align: center;
+      font-family: var(--ff-mono);
+      font-size: 12px;
+      color: var(--text-3);
+    }
+
+    .terminal-body {
+      padding: 24px 28px;
+      font-family: var(--ff-mono);
+      font-size: 13px;
+      line-height: 1.75;
+      min-height: 360px;
+      overflow-x: auto;
+    }
+
+    .term-prompt {
+      color: var(--green);
+      user-select: none;
+    }
+    .term-cmd { color: var(--text-1); }
+    .term-cursor {
+      display: inline-block;
+      width: 8px;
+      height: 15px;
+      background: var(--text-1);
+      vertical-align: text-bottom;
+      animation: blink 1s step-end infinite;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    .term-output { color: var(--text-2); }
+    .term-dim { color: var(--text-3); }
+    .term-green { color: var(--green); }
+    .term-red { color: var(--red); }
+    .term-amber { color: var(--amber); }
+    .term-blue { color: var(--blue); }
+    .term-white { color: var(--text-1); }
+    .term-bold { font-weight: 700; }
+
+    .term-line { display: block; }
+    .term-line.hidden { display: none; }
+
+    .progress-bar-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .progress-bar {
+      width: 180px;
+      height: 6px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--green);
+      border-radius: 3px;
+      width: 0%;
+      transition: width 1.8s ease-out;
+    }
+
+    /* ── Features ─────────────────────────────────────────── */
+    .features-section { padding: 80px 0 100px; }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2px;
+      margin-top: 64px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .feature-card {
+      background: var(--bg-deep);
+      padding: 40px 36px;
+      transition: background var(--transition-md);
+    }
+    .feature-card:hover { background: var(--bg-surface); }
+
+    .feature-num {
+      font-family: var(--ff-mono);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-3);
+      letter-spacing: 0.1em;
+      margin-bottom: 20px;
+    }
+
+    .feature-icon {
+      width: 36px;
+      height: 36px;
+      margin-bottom: 20px;
+    }
+
+    .feature-title {
+      font-family: var(--ff-sans);
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-1);
+      line-height: 1.3;
+      margin-bottom: 12px;
+    }
+
+    .feature-desc {
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--text-2);
+    }
+
+    .feature-highlight {
+      display: inline-block;
+      margin-top: 16px;
+      font-family: var(--ff-mono);
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 3px;
+    }
+    .feature-highlight-red { background: var(--red-dim); color: var(--red-bright); }
+    .feature-highlight-amber { background: var(--amber-dim); color: var(--amber); }
+    .feature-highlight-green { background: var(--green-dim); color: var(--green); }
+
+    @media (max-width: 768px) {
+      .features-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── Scenarios ────────────────────────────────────────── */
+    .scenarios-section { padding: 80px 0; }
+
+    .scenarios-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 1px;
+      margin-top: 56px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .scenario-card {
+      background: var(--bg-deep);
+      padding: 28px 24px;
+      border-top: 3px solid transparent;
+      transition: background var(--transition-md), border-color var(--transition-md);
+      cursor: default;
+    }
+    .scenario-card:hover { background: var(--bg-surface); }
+
+    .scenario-card-lc { border-top-color: #EF4444; }
+    .scenario-card-vs { border-top-color: #F59E0B; }
+    .scenario-card-cb { border-top-color: #8B5CF6; }
+    .scenario-card-rs { border-top-color: #3B82F6; }
+    .scenario-card-md { border-top-color: #6B7280; }
+
+    .scenario-tag {
+      font-family: var(--ff-mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 10px;
+    }
+
+    .scenario-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-1);
+      margin-bottom: 8px;
+      line-height: 1.3;
+    }
+
+    .scenario-desc {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-2);
+    }
+
+    .scenario-params {
+      margin-top: 12px;
+      font-family: var(--ff-mono);
+      font-size: 10.5px;
+      color: var(--text-3);
+      line-height: 1.7;
+    }
+
+    @media (max-width: 900px) {
+      .scenarios-grid { grid-template-columns: repeat(2, 1fr); }
+      .scenario-card:last-child { border-bottom: none; }
+    }
+    @media (max-width: 500px) {
+      .scenarios-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── Install ──────────────────────────────────────────── */
+    .install-section { padding: 80px 0 100px; }
+
+    .install-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-top: 56px;
+    }
+
+    .install-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-mid);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .install-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+    }
+
+    .install-card-title {
+      font-family: var(--ff-mono);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-2);
+      letter-spacing: 0.05em;
+    }
+
+    .copy-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: var(--ff-mono);
+      font-size: 11px;
+      color: var(--text-3);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .copy-btn:hover { background: rgba(255,255,255,0.05); color: var(--text-2); border-color: var(--border-mid); }
+    .copy-btn:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+    .copy-btn.copied { color: var(--green); border-color: rgba(34,197,94,0.3); }
+
+    .install-code {
+      padding: 24px 20px;
+      font-family: var(--ff-mono);
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--text-1);
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .ic-prompt { color: var(--text-3); }
+    .ic-cmd    { color: var(--green); }
+    .ic-pkg    { color: var(--blue); }
+    .ic-flag   { color: var(--amber); }
+
+    .install-note {
+      font-size: 14px;
+      color: var(--text-3);
+      text-align: center;
+      margin-top: 20px;
+      line-height: 1.6;
+    }
+    .install-note a {
+      color: var(--text-2);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      text-decoration-color: var(--border-mid);
+      transition: color var(--transition);
+    }
+    .install-note a:hover { color: var(--text-1); }
+
+    @media (max-width: 700px) {
+      .install-grid { grid-template-columns: 1fr; }
+      .install-code { font-size: 13px; }
+    }
+
+    /* ── Stats Bar ────────────────────────────────────────── */
+    .stats-bar {
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 40px 0;
+      margin: 0;
+    }
+
+    .stats-inner {
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 32px;
+    }
+
+    .stat-item { text-align: center; flex: 1; min-width: 140px; }
+
+    .stat-value {
+      font-family: var(--ff-mono);
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--text-1);
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    .stat-label {
+      font-size: 13px;
+      color: var(--text-3);
+    }
+
+    /* ── Footer ───────────────────────────────────────────── */
+    footer {
+      padding: 48px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 24px;
+    }
+
+    .footer-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .footer-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+    }
+
+    .footer-logo-img {
+      width: 32px;
+      height: 32px;
+      border-radius: 4px;
+      object-fit: contain;
+    }
+
+    .footer-name {
+      font-family: var(--ff-mono);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-2);
+    }
+
+    .footer-badges {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border: 1px solid var(--border-mid);
+      border-radius: var(--radius-sm);
+      font-family: var(--ff-mono);
+      font-size: 11px;
+      color: var(--text-3);
+      text-decoration: none;
+      transition: all var(--transition);
+    }
+    .badge:hover { border-color: rgba(255,255,255,0.2); color: var(--text-2); }
+    .badge:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+    .badge-green { border-color: rgba(34,197,94,0.25); color: var(--green); }
+    .badge-green:hover { background: var(--green-dim); }
+
+    .footer-right {
+      font-size: 13px;
+      color: var(--text-3);
+    }
+
+    .footer-link {
+      color: var(--text-3);
+      text-decoration: none;
+      transition: color var(--transition);
+    }
+    .footer-link:hover { color: var(--text-2); }
+
+    /* ── Dividers ─────────────────────────────────────────── */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav aria-label="Main navigation">
+    <a href="#" class="nav-logo">
+      <img src="media/blackswan.png" alt="BlackSwan logo" class="nav-logo-img">
+      BlackSwan
+    </a>
+    <ul class="nav-links" role="list">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#scenarios">Scenarios</a></li>
+      <li><a href="#install">Install</a></li>
+      <li><a href="https://github.com/Lushenwar/BlackSwan/blob/main/README.md#mcp-server-claude-code-integration" target="_blank" rel="noopener">MCP</a></li>
+      <li><a href="https://github.com/Lushenwar/BlackSwan" target="_blank" rel="noopener">Docs</a></li>
+    </ul>
+    <div class="nav-cta">
+      <a href="https://github.com/Lushenwar/BlackSwan" class="btn btn-ghost" target="_blank" rel="noopener" aria-label="View on GitHub">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero" aria-labelledby="hero-heading">
+    <div class="container">
+      <div class="hero-inner">
+
+        <!-- Left: copy -->
+        <div>
+          <div class="hero-badge reveal">
+            <span class="hero-badge-dot" aria-hidden="true"></span>
+            Mathematical Fragility Debugger
+          </div>
+
+          <h1 class="hero-headline reveal reveal-delay-1" id="hero-heading">
+            Your risk model<br>passes every test.
+          </h1>
+          <p class="hero-headline-2 reveal reveal-delay-2">
+            Then it <em>blows up</em> in prod.
+          </p>
+
+          <p class="hero-sub reveal reveal-delay-3">
+            BlackSwan runs <strong>5,000 Monte Carlo simulations</strong> under realistic market stress scenarios and pinpoints the <strong>exact source line</strong> where your math breaks — how often, under what conditions, and which input caused it.
+          </p>
+
+          <div class="hero-actions reveal reveal-delay-4">
+            <button class="hero-pip" onclick="copyText('pip install blackswan', this)" aria-label="Copy pip install command">
+              <span class="hero-pip-prompt" aria-hidden="true">$</span>
+              <span class="hero-pip-text">pip install blackswan</span>
+              <svg class="hero-pip-copy" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            </button>
+            <a href="https://github.com/Lushenwar/BlackSwan" class="btn btn-ghost btn-large" target="_blank" rel="noopener">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              VS Code Extension
+            </a>
+          </div>
+
+          <div class="hero-meta reveal">
+            <div class="hero-meta-item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              Python 3.11+
+            </div>
+            <div class="hero-meta-item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              NumPy / Pandas
+            </div>
+            <div class="hero-meta-item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              MIT License
+            </div>
+            <div class="hero-meta-item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              100% Deterministic
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: code mockup -->
+        <div class="reveal reveal-delay-2">
+          <div class="code-mockup" role="img" aria-label="VS Code showing BlackSwan detecting a failure at line 82 of risk_model.py">
+            <div class="mockup-bar" aria-hidden="true">
+              <div class="mockup-dot mockup-dot-r"></div>
+              <div class="mockup-dot mockup-dot-y"></div>
+              <div class="mockup-dot mockup-dot-g"></div>
+              <div class="mockup-title">risk_model.py — BlackSwan</div>
+            </div>
+            <div class="mockup-content">
+              <div class="code-editor">
+                <div class="line-numbers" aria-hidden="true">
+                  78<br>79<br>80<br>81<br>82<br>83<br>84<br>85<br>
+                </div>
+                <div class="code-lines">
+<code class="code-line"><span class="tok-cmt"># Apply correlation stress</span></code>
+<code class="code-line"><span class="tok-var">corr_shift</span> <span class="tok-op">=</span> <span class="tok-var">params</span><span class="tok-op">.</span><span class="tok-fn">get</span>(<span class="tok-str">"correlation_shift"</span>)</code>
+<code class="code-line"><span class="tok-var">adj</span> <span class="tok-op">=</span> <span class="tok-var">corr_matrix</span> <span class="tok-op">+</span> <span class="tok-var">corr_shift</span></code>
+<code class="code-line"><span class="tok-var">np</span><span class="tok-op">.</span><span class="tok-fn">fill_diagonal</span>(<span class="tok-var">adj</span>, <span class="tok-num">1.0</span>)</code>
+<code class="code-line highlight-red"><span class="tok-var">cov_matrix</span> <span class="tok-op">=</span> <span class="tok-cls">np</span><span class="tok-op">.</span><span class="tok-fn">outer</span>(<span class="squiggle"><span class="tok-var">vols</span></span>, <span class="tok-var">vols</span>) <span class="tok-op">*</span> <span class="tok-var">adj</span></code>
+<div class="failure-tooltip" aria-label="BlackSwan failure detected">
+  <div class="failure-tooltip-head">&#x25CF; critical &nbsp;·&nbsp; non_psd_matrix</div>
+  <div class="failure-tooltip-body">Covariance matrix loses positive semi-definiteness. Min eigenvalue: −0.0034.</div>
+  <div class="failure-tooltip-freq">847 / 5000 iterations &nbsp;(16.9%)</div>
+</div>
+<code class="code-line highlight-amber"><span class="tok-var">L</span> <span class="tok-op">=</span> <span class="tok-cls">np</span><span class="tok-op">.</span><span class="tok-var">linalg</span><span class="tok-op">.</span><span class="tok-fn">cholesky</span>(<span class="tok-var">cov_matrix</span>)</code>
+<code class="code-line"><span class="tok-var">scenarios</span> <span class="tok-op">=</span> <span class="tok-var">L</span> <span class="tok-op">@</span> <span class="tok-var">Z</span></code>
+<code class="code-line"><span class="tok-kw">return</span> <span class="tok-var">scenarios</span></code>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Stats -->
+  <div class="stats-bar">
+    <div class="container">
+      <div class="stats-inner">
+        <div class="stat-item reveal">
+          <div class="stat-value" style="color: var(--red);">8</div>
+          <div class="stat-label">Failure detector types</div>
+        </div>
+        <div class="stat-item reveal reveal-delay-1">
+          <div class="stat-value">5,000</div>
+          <div class="stat-label">Iterations per run</div>
+        </div>
+        <div class="stat-item reveal reveal-delay-2">
+          <div class="stat-value" style="color: var(--green);">100%</div>
+          <div class="stat-label">Deterministic with seed</div>
+        </div>
+        <div class="stat-item reveal reveal-delay-3">
+          <div class="stat-value">&lt;5s</div>
+          <div class="stat-label">Time to first finding</div>
+        </div>
+        <div class="stat-item reveal reveal-delay-4">
+          <div class="stat-value">581</div>
+          <div class="stat-label">Tests passing</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terminal Demo -->
+  <section class="terminal-section" aria-labelledby="demo-heading">
+    <div class="container">
+      <div class="terminal-header">
+        <div class="section-label reveal">Live demo</div>
+        <h2 class="section-title reveal reveal-delay-1" id="demo-heading">See it find the break</h2>
+        <p class="section-sub reveal reveal-delay-2" style="margin: 0 auto; text-align: center;">
+          One command. Five thousand simulations. One exact line — with causal chain, frequency, and a ready-to-apply fix.
+        </p>
+      </div>
+
+      <div class="terminal-window reveal reveal-delay-1" aria-label="Terminal showing BlackSwan analysis">
+        <div class="terminal-bar" aria-hidden="true">
+          <div class="term-dot term-dot-r"></div>
+          <div class="term-dot term-dot-y"></div>
+          <div class="term-dot term-dot-g"></div>
+          <div class="terminal-title">bash — risk_model.py</div>
+        </div>
+        <div class="terminal-body" id="terminal-body" aria-live="polite" aria-atomic="false">
+          <!-- Content injected by JS -->
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- Features -->
+  <section class="features-section" id="features" aria-labelledby="features-heading">
+    <div class="container">
+      <div class="section-label reveal">How it works</div>
+      <h2 class="section-title reveal reveal-delay-1" id="features-heading">What no linter can do</h2>
+      <p class="section-sub reveal reveal-delay-2">Standard linters catch syntax errors. BlackSwan catches the math that looks correct until a 3-sigma event hits it — and tells you exactly where, why, and how to fix it.</p>
+
+      <div class="features-grid" role="list">
+
+        <article class="feature-card reveal" role="listitem">
+          <div class="feature-num">01</div>
+          <svg class="feature-icon" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+            <rect x="4" y="4" width="28" height="28" rx="4" stroke="var(--red)" stroke-width="1.5"/>
+            <line x1="4" y1="16" x2="32" y2="16" stroke="var(--border-mid)" stroke-width="1"/>
+            <rect x="4" y="16" width="28" height="8" fill="var(--red-dim)"/>
+            <line x1="14" y1="4" x2="14" y2="32" stroke="var(--border-mid)" stroke-width="1"/>
+            <circle cx="18" cy="20" r="3" fill="var(--red)"/>
+          </svg>
+          <h3 class="feature-title">Finds the exact line</h3>
+          <p class="feature-desc">Not "your matrix might be unstable." The exact line. The exact condition. How many times out of 5,000 it broke under that market scenario. 8 detector types run automatically — no configuration.</p>
+          <span class="feature-highlight feature-highlight-red">line 82 · 16.9% failure rate</span>
+        </article>
+
+        <article class="feature-card reveal reveal-delay-1" role="listitem">
+          <div class="feature-num">02</div>
+          <svg class="feature-icon" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+            <circle cx="8" cy="8" r="4" stroke="var(--amber)" stroke-width="1.5"/>
+            <circle cx="28" cy="18" r="4" stroke="var(--amber)" stroke-width="1.5"/>
+            <circle cx="8" cy="28" r="4" stroke="var(--red)" stroke-width="1.5" fill="var(--red-dim)"/>
+            <path d="M12 8 L24 16" stroke="var(--border-mid)" stroke-width="1.5" marker-end="url(#arr)"/>
+            <path d="M12 28 L24 20" stroke="var(--border-mid)" stroke-width="1.5"/>
+            <path d="M8 12 L8 24" stroke="var(--amber)" stroke-width="1.5" stroke-dasharray="2 2"/>
+          </svg>
+          <h3 class="feature-title">Traces the full causal chain</h3>
+          <p class="feature-desc">Every failure includes a dependency walk: which root input caused which intermediate variable to drift, finally breaking the math at which line. Two-Path attribution with Slow-Path replay for verified, high-confidence results.</p>
+          <span class="feature-highlight feature-highlight-amber">corr_shift → adj_matrix → cov_matrix</span>
+        </article>
+
+        <article class="feature-card reveal reveal-delay-2" role="listitem">
+          <div class="feature-num">03</div>
+          <svg class="feature-icon" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+            <path d="M6 18 L14 26 L30 10" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="4" y="4" width="28" height="28" rx="4" stroke="var(--border-mid)" stroke-width="1.5"/>
+          </svg>
+          <h3 class="feature-title">Auto-fixes with a deterministic guard</h3>
+          <p class="feature-desc">For each shatter point, BlackSwan generates a mathematically sound fix — a nearest-PSD correction, an epsilon clamp, a denominator guard — and applies it in one command.</p>
+          <span class="feature-highlight feature-highlight-green">Higham 2002 nearest-PSD applied</span>
+        </article>
+
+        <article class="feature-card reveal" role="listitem">
+          <div class="feature-num">04</div>
+          <svg class="feature-icon" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+            <rect x="4" y="8" width="28" height="20" rx="3" stroke="var(--blue)" stroke-width="1.5"/>
+            <line x1="4" y1="14" x2="32" y2="14" stroke="var(--border-mid)" stroke-width="1"/>
+            <circle cx="10" cy="11" r="2" fill="var(--red)"/>
+            <circle cx="17" cy="11" r="2" fill="var(--amber)"/>
+            <circle cx="24" cy="11" r="2" fill="var(--green)"/>
+            <path d="M10 20 L14 24 L26 18" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <h3 class="feature-title">CI and Claude integration</h3>
+          <p class="feature-desc">Emit SARIF 2.1.0 for GitHub Code Scanning with one flag. Or run stress tests directly from a Claude conversation via the MCP server — findings, causal chains, and fix hints without leaving your IDE.</p>
+          <span class="feature-highlight feature-highlight-green">--output sarif &nbsp;·&nbsp; blackswan-mcp</span>
+        </article>
+
+        <article class="feature-card reveal reveal-delay-1" role="listitem">
+          <div class="feature-num">05</div>
+          <svg class="feature-icon" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+            <path d="M6 10 L18 6 L30 10 L30 20 C30 26 24 30 18 32 C12 30 6 26 6 20 Z" stroke="var(--purple)" stroke-width="1.5" fill="rgba(167,139,250,0.08)"/>
+            <path d="M13 18 L17 22 L23 14" stroke="var(--purple)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <h3 class="feature-title">Fully reproducible results</h3>
+          <p class="feature-desc">Every run emits a ReproducibilityCard: exact BlackSwan version, NumPy version, scenario hash, seed, and a ready-to-paste replay command. Same seed, same scenario, same results — always.</p>
+          <span class="feature-highlight feature-highlight-amber">seed 42 · scenario_hash a3f9c2</span>
+        </article>
+
+        <article class="feature-card reveal reveal-delay-2" role="listitem">
+          <div class="feature-num">06</div>
+          <svg class="feature-icon" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+            <circle cx="18" cy="18" r="12" stroke="var(--red)" stroke-width="1.5"/>
+            <path d="M18 10 L18 18 L24 22" stroke="var(--red)" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="18" cy="18" r="2" fill="var(--red)"/>
+          </svg>
+          <h3 class="feature-title">Adversarial stress mode</h3>
+          <p class="feature-desc">Beyond random Monte Carlo: a genetic algorithm evolves perturbation sets toward worst-case inputs. A HardnessAdaptor ramps intensity when no failures are found, so robust code is actually tested hard.</p>
+          <span class="feature-highlight feature-highlight-red">--adversarial --population 200</span>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- Scenarios -->
+  <section class="scenarios-section" id="scenarios" aria-labelledby="scenarios-heading">
+    <div class="container">
+      <div class="section-label reveal">Preset scenarios</div>
+      <h2 class="section-title reveal reveal-delay-1" id="scenarios-heading">Five stress regimes, built-in</h2>
+      <p class="section-sub reveal reveal-delay-2">Each scenario is a reproducible YAML spec. Same seed, same parameters, same results — always.</p>
+
+      <div class="scenarios-grid" role="list">
+
+        <article class="scenario-card scenario-card-lc reveal" role="listitem">
+          <div class="scenario-tag">01</div>
+          <h3 class="scenario-name">Liquidity Crash</h3>
+          <p class="scenario-desc">Spread widening, volatility expansion, correlation contagion, and turnover collapse simultaneously.</p>
+          <div class="scenario-params">
+            spread: 1.5×–3.5×<br>
+            vol: lognormal μ=1.8<br>
+            corr: +0.10 to +0.35
+          </div>
+        </article>
+
+        <article class="scenario-card scenario-card-vs reveal reveal-delay-1" role="listitem">
+          <div class="scenario-tag">02</div>
+          <h3 class="scenario-name">Vol Spike</h3>
+          <p class="scenario-desc">Sudden volatility regime shift. Tests whether your model survives realized vol 2×–4× above historical.</p>
+          <div class="scenario-params">
+            vol mult: 2×–4×<br>
+            corr: +0.05 to +0.15<br>
+            spread: unchanged
+          </div>
+        </article>
+
+        <article class="scenario-card scenario-card-cb reveal reveal-delay-2" role="listitem">
+          <div class="scenario-tag">03</div>
+          <h3 class="scenario-name">Correlation Breakdown</h3>
+          <p class="scenario-desc">Pairwise correlations surge. The classic covariance matrix PSD failure scenario.</p>
+          <div class="scenario-params">
+            corr: +0.20 to +0.50<br>
+            vol: 1.2×–1.5×<br>
+            diversification: gone
+          </div>
+        </article>
+
+        <article class="scenario-card scenario-card-rs reveal reveal-delay-3" role="listitem">
+          <div class="scenario-tag">04</div>
+          <h3 class="scenario-name">Rate Shock</h3>
+          <p class="scenario-desc">Parallel rate shift with credit spread widening. Stress tests duration and convexity assumptions.</p>
+          <div class="scenario-params">
+            rates: +100 to +300 bps<br>
+            spread: +50 to +150 bps<br>
+            curve: parallel
+          </div>
+        </article>
+
+        <article class="scenario-card scenario-card-md reveal reveal-delay-4" role="listitem">
+          <div class="scenario-tag">05</div>
+          <h3 class="scenario-name">Missing Data</h3>
+          <p class="scenario-desc">Random NaN injection and partial time series truncation. Finds silent failures from bad data handling.</p>
+          <div class="scenario-params">
+            NaN inject: 5–20%<br>
+            series: partial truncation<br>
+            silent: by design
+          </div>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- Install -->
+  <section class="install-section" id="install" aria-labelledby="install-heading">
+    <div class="container">
+      <div style="text-align: center;">
+        <div class="section-label reveal" style="justify-content: center;">Get started</div>
+        <h2 class="section-title reveal reveal-delay-1" id="install-heading">One install. Every interface.</h2>
+        <p class="section-sub reveal reveal-delay-2" style="margin: 0 auto; text-align: center; margin-bottom: 0;">CLI, Python API, VS Code extension, GitHub Actions, and Claude MCP — the engine is the same in all of them.</p>
+      </div>
+
+      <div class="install-grid reveal reveal-delay-2">
+
+        <div class="install-card">
+          <div class="install-card-header">
+            <span class="install-card-title">pip — base package</span>
+            <button class="copy-btn" onclick="copyText('pip install blackswan', this)" aria-label="Copy pip install command">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+              Copy
+            </button>
+          </div>
+          <div class="install-code">
+            <span class="ic-prompt">$ </span><span class="ic-cmd">pip install</span> <span class="ic-pkg">blackswan</span>
+          </div>
+        </div>
+
+        <div class="install-card">
+          <div class="install-card-header">
+            <span class="install-card-title">CLI — stress test a file</span>
+            <button class="copy-btn" onclick="copyText('python -m blackswan test risk_model.py --scenario liquidity_crash', this)" aria-label="Copy CLI command">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2v1"/></svg>
+              Copy
+            </button>
+          </div>
+          <div class="install-code" style="white-space: pre;">
+<span class="ic-prompt">$ </span><span class="ic-cmd">python -m blackswan</span> <span class="ic-pkg">test</span> risk_model.py <span class="ic-flag">--scenario</span> liquidity_crash</div>
+        </div>
+
+      </div>
+
+      <div style="margin-top: 20px;">
+        <div class="install-card">
+          <div class="install-card-header">
+            <span class="install-card-title">VS Code extension — install from VSIX</span>
+            <button class="copy-btn" onclick="copyText('code --install-extension blackswan.vsix', this)" aria-label="Copy VS Code install command">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2v1"/></svg>
+              Copy
+            </button>
+          </div>
+          <div class="install-code">
+            <span class="ic-prompt">$ </span><span class="ic-cmd">code --install-extension</span> <span class="ic-pkg">blackswan.vsix</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top: 20px;" class="install-grid">
+
+        <div class="install-card">
+          <div class="install-card-header">
+            <span class="install-card-title">SARIF — GitHub Code Scanning</span>
+            <button class="copy-btn" onclick="copyText('python -m blackswan test risk_model.py --scenario liquidity_crash --output sarif --output-path results.sarif', this)" aria-label="Copy SARIF command">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+              Copy
+            </button>
+          </div>
+          <div class="install-code" style="white-space: pre; overflow-x: auto;">
+<span class="ic-prompt">$ </span><span class="ic-cmd">python -m blackswan</span> <span class="ic-pkg">test</span> risk_model.py <span class="ic-flag">--scenario</span> liquidity_crash <span class="ic-flag">--output</span> sarif <span class="ic-flag">--output-path</span> results.sarif</div>
+        </div>
+
+        <div class="install-card">
+          <div class="install-card-header">
+            <span class="install-card-title">Claude MCP — run from any conversation</span>
+            <button class="copy-btn" onclick="copyText('pip install blackswan[mcp]', this)" aria-label="Copy MCP install command">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+              Copy
+            </button>
+          </div>
+          <div class="install-code">
+            <span class="ic-prompt">$ </span><span class="ic-cmd">pip install</span> <span class="ic-pkg">blackswan</span><span class="ic-flag">[mcp]</span> <span style="color:var(--text-3);">&amp;&amp; blackswan-mcp</span>
+          </div>
+        </div>
+
+      </div>
+
+      <p class="install-note reveal">
+        Requires Python 3.11+ · NumPy · PyYAML ·
+        <a href="https://github.com/Lushenwar/BlackSwan/blob/main/README.md" target="_blank" rel="noopener">Full documentation on GitHub</a>
+      </p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer role="contentinfo">
+    <div class="container">
+      <div class="footer-inner">
+        <div class="footer-left">
+          <a href="#" class="footer-logo" aria-label="BlackSwan home">
+            <img src="media/blackswan.png" alt="" class="footer-logo-img">
+            <span class="footer-name">BlackSwan</span>
+          </a>
+        </div>
+
+        <div class="footer-badges">
+          <a href="https://github.com/Lushenwar/BlackSwan" class="badge" target="_blank" rel="noopener" aria-label="View on GitHub">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+            GitHub
+          </a>
+          <a href="https://pypi.org/project/blackswan" class="badge badge-green" target="_blank" rel="noopener" aria-label="View on PyPI">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+            PyPI
+          </a>
+          <span class="badge">MIT License</span>
+          <span class="badge">v0.4.0</span>
+        </div>
+
+        <div class="footer-right">
+          <a href="https://github.com/Lushenwar/BlackSwan/blob/main/docs/ARCHITECTURE.md" class="footer-link" target="_blank" rel="noopener">Architecture</a>
+          &nbsp;·&nbsp;
+          <a href="https://github.com/Lushenwar/BlackSwan/blob/main/docs/SCENARIOS.md" class="footer-link" target="_blank" rel="noopener">Scenarios</a>
+          &nbsp;·&nbsp;
+          <a href="https://github.com/Lushenwar/BlackSwan/blob/main/docs/CONTRIBUTING.md" class="footer-link" target="_blank" rel="noopener">Contribute</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // ── Scroll reveal ──────────────────────────────────────
+    const revealEls = document.querySelectorAll('.reveal');
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('visible');
+          revealObserver.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+    revealEls.forEach(el => revealObserver.observe(el));
+
+    // Trigger hero elements immediately
+    document.querySelectorAll('.hero .reveal').forEach(el => {
+      setTimeout(() => el.classList.add('visible'), 50);
+    });
+
+    // ── Copy to clipboard ─────────────────────────────────
+    function copyText(text, btn) {
+      navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.innerHTML;
+        btn.classList.add('copied');
+        btn.innerHTML = btn.innerHTML.replace(/Copy|pip install blackswan|\$ pip install blackswan/g, 'Copied!');
+        setTimeout(() => {
+          btn.innerHTML = orig;
+          btn.classList.remove('copied');
+        }, 2000);
+      }).catch(() => {
+        // fallback: select text
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      });
+    }
+
+    // ── Terminal animation ────────────────────────────────
+    const terminalStages = [
+      // Stage 0: command typing
+      { type: 'type', delay: 0, content: '$ python -m blackswan test risk_model.py --scenario liquidity_crash --seed 42', class: '' },
+      { type: 'blank', delay: 400 },
+
+      // Stage 1: header
+      { type: 'line', delay: 600, content: '  BlackSwan 0.4.0  ·  liquidity_crash  ·  5,000 iterations  ·  seed 42  ·  full          3.4s', class: 'term-dim' },
+      { type: 'blank', delay: 100 },
+
+      // Stage 2: progress
+      { type: 'progress', delay: 900 },
+      { type: 'blank', delay: 100 },
+
+      // Stage 3: findings header
+      { type: 'line', delay: 2800, content: '── FAILURES DETECTED  (1 shatter point) ───────────────────────────────────────', class: 'term-red term-bold' },
+      { type: 'blank', delay: 80 },
+
+      // Stage 4: finding badge + message
+      { type: 'line', delay: 300, content: '   CRITICAL   Non-PSD Matrix                                          line 82', class: 'term-red term-bold' },
+      { type: 'blank', delay: 60 },
+      { type: 'line', delay: 100, content: '  Covariance matrix loses positive semi-definiteness when pairwise', class: 'term-white' },
+      { type: 'line', delay: 60,  content: '  correlation exceeds 0.91. Smallest eigenvalue: −0.0034.', class: 'term-white' },
+      { type: 'blank', delay: 80 },
+      { type: 'line', delay: 100, content: '  Frequency   ████████░░░░░░░░░░░░░░░░░░░░  16.9%  847 / 5000 iterations', class: 'term-amber' },
+      { type: 'line', delay: 80,  content: '  Confidence  high', class: 'term-green' },
+      { type: 'blank', delay: 80 },
+
+      // Stage 5: causal chain
+      { type: 'line', delay: 200, content: '  Causal Chain ────────────────────────', class: 'term-dim' },
+      { type: 'line', delay: 150, content: '    →  line 14    corr_shift              root input', class: 'term-blue' },
+      { type: 'line', delay: 120, content: '    ·  line 47    adjusted_corr_matrix    intermediate', class: 'term-dim' },
+      { type: 'line', delay: 120, content: '    ►  line 82    cov_matrix              FAILURE SITE', class: 'term-red' },
+      { type: 'blank', delay: 80 },
+
+      // Stage 6: fix hint
+      { type: 'line', delay: 200, content: '  Fix Hint   Apply nearest-PSD correction (Higham 2002) after', class: 'term-amber' },
+      { type: 'line', delay: 60,  content: '             correlation perturbation, or clamp eigenvalues to ε.', class: 'term-amber' },
+      { type: 'blank', delay: 80 },
+      { type: 'line', delay: 100, content: '  Quick Fix  $ python -m blackswan fix risk_model.py --line 82 --type non_psd_matrix', class: 'term-green' },
+      { type: 'blank', delay: 100 },
+
+      // Stage 7: summary
+      { type: 'line', delay: 300, content: '  1 failures  ·  16.9% rate  ·  1 unique type  ·  3.4s', class: 'term-dim' },
+      { type: 'blank', delay: 60 },
+      { type: 'line', delay: 100, content: '  Add --format json for machine-readable output. Add --output sarif for CI.', class: 'term-dim' },
+    ];
+
+    const termBody = document.getElementById('terminal-body');
+    let animated = false;
+
+    function buildTerminal() {
+      if (animated) return;
+      animated = true;
+
+      let totalDelay = 0;
+      let progressEl = null;
+
+      terminalStages.forEach((stage, i) => {
+        totalDelay += stage.delay;
+        const d = totalDelay;
+
+        if (stage.type === 'blank') {
+          setTimeout(() => {
+            const br = document.createElement('span');
+            br.className = 'term-line';
+            br.textContent = '\u00A0';
+            termBody.appendChild(br);
+          }, d);
+        }
+
+        else if (stage.type === 'line') {
+          setTimeout(() => {
+            const line = document.createElement('span');
+            line.className = 'term-line ' + (stage.class || 'term-output');
+            line.textContent = stage.content;
+            termBody.appendChild(line);
+          }, d);
+        }
+
+        else if (stage.type === 'type') {
+          // Type the command character by character using a text node
+          setTimeout(() => {
+            const line = document.createElement('span');
+            line.className = 'term-line';
+
+            const promptNode = document.createElement('span');
+            promptNode.className = 'term-prompt';
+            promptNode.textContent = '$ ';
+
+            const textNode = document.createTextNode('');
+            const cursor = document.createElement('span');
+            cursor.className = 'term-cursor';
+            cursor.setAttribute('aria-hidden', 'true');
+
+            line.appendChild(promptNode);
+            line.appendChild(textNode);
+            line.appendChild(cursor);
+            termBody.appendChild(line);
+
+            const cmdText = stage.content.replace(/^\$ /, '');
+            let idx = 0;
+            const charsPerFrame = 3;
+
+            function typeNext() {
+              if (idx < cmdText.length) {
+                const end = Math.min(idx + charsPerFrame, cmdText.length);
+                textNode.nodeValue = cmdText.slice(0, end);
+                idx = end;
+                requestAnimationFrame(typeNext);
+              } else {
+                cursor.remove();
+              }
+            }
+
+            // Check for reduced motion preference
+            const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (prefersReduced) {
+              textNode.nodeValue = cmdText;
+              cursor.remove();
+            } else {
+              requestAnimationFrame(typeNext);
+            }
+          }, d);
+        }
+
+        else if (stage.type === 'progress') {
+          setTimeout(() => {
+            const line = document.createElement('span');
+            line.className = 'term-line';
+            line.innerHTML = '  <span class="term-dim">Running simulations...  </span>';
+
+            const barWrap = document.createElement('span');
+            barWrap.className = 'progress-bar-wrap';
+            const bar = document.createElement('span');
+            bar.className = 'progress-bar';
+            const fill = document.createElement('span');
+            fill.className = 'progress-fill';
+            bar.appendChild(fill);
+
+            const count = document.createTextNode(' 0/5000');
+            barWrap.appendChild(bar);
+            barWrap.appendChild(count);
+            line.appendChild(barWrap);
+            termBody.appendChild(line);
+            progressEl = { fill, count };
+
+            const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (prefersReduced) {
+              fill.style.width = '100%';
+              fill.style.transition = 'none';
+              count.nodeValue = ' 5000/5000';
+            } else {
+              // Animate progress bar
+              requestAnimationFrame(() => {
+                fill.style.width = '100%';
+              });
+              let n = 0;
+              const total = 5000;
+              const dur = 1800;
+              const start = performance.now();
+              function animCount(ts) {
+                const prog = Math.min((ts - start) / dur, 1);
+                n = Math.round(prog * total);
+                count.nodeValue = ' ' + n.toLocaleString() + '/5000';
+                if (prog < 1) requestAnimationFrame(animCount);
+                else count.nodeValue = ' 5000/5000';
+              }
+              requestAnimationFrame(animCount);
+            }
+          }, d);
+        }
+      });
+
+      // After all stages, re-add blinking cursor
+      setTimeout(() => {
+        const cursor = document.createElement('span');
+        cursor.className = 'term-cursor';
+        cursor.setAttribute('aria-hidden', 'true');
+        termBody.appendChild(cursor);
+      }, totalDelay + 500);
+    }
+
+    // Trigger terminal when it enters viewport
+    const terminalSection = document.querySelector('.terminal-section');
+    const terminalObserver = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        buildTerminal();
+        terminalObserver.disconnect();
+      }
+    }, { threshold: 0.3 });
+    terminalObserver.observe(terminalSection);
+  </script>
+
+</body>
+</html>
