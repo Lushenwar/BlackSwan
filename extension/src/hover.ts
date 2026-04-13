@@ -87,19 +87,22 @@ function makeLineLink(
 /**
  * Build the MarkdownString hover content for a single shatter point.
  *
- * Pure function — no VS Code side effects. Safe to call in unit tests without
- * an extension host.
- *
  * Produces a trusted MarkdownString so `command://` URIs in causal-chain links
  * are clickable (VS Code requires `isTrusted = true` for command links).
  *
- * @param sp          Shatter point from the engine.
- * @param documentUri URI of the document that contains the failure — used to
- *                    build `vscode.open` command links in the causal chain.
+ * @param sp           Shatter point from the engine.
+ * @param documentUri  URI of the document that contains the failure — used to
+ *                     build `vscode.open` command links in the causal chain.
+ * @param getLineText  Optional: given a 1-indexed line number, returns the raw
+ *                     source text for that line.  When provided, each causal-
+ *                     chain node shows the actual code at that line as an
+ *                     inline snippet so the user can trace the propagation path
+ *                     without jumping between lines.  Safe to omit in tests.
  */
 export function buildHoverContent(
   sp: ShatterPoint,
   documentUri: vscode.Uri,
+  getLineText?: (line1Based: number) => string | undefined,
 ): vscode.MarkdownString {
   const md = new vscode.MarkdownString("");
   md.isTrusted = true;   // Required for command:// URIs in links.
@@ -122,14 +125,48 @@ export function buildHoverContent(
     for (const link of sp.causal_chain) {
       const roleLabel = ROLE_LABELS[link.role] ?? link.role;
       const lineLink  = makeLineLink(documentUri, link.line, link.variable);
-      md.appendMarkdown(`- ${roleLabel} → ${lineLink}\n`);
+
+      // Pull the raw source for this line so the user can see exactly what
+      // code is at each propagation step without leaving the hover.
+      // Trim leading/trailing whitespace and cap at 80 chars so long
+      // expressions don't overflow the hover card.
+      const rawText  = getLineText?.(link.line)?.trim() ?? "";
+      const snippet  = rawText
+        ? ` — \`${rawText.length > 80 ? rawText.slice(0, 80) + "…" : rawText}\``
+        : "";
+
+      md.appendMarkdown(`- ${roleLabel} → ${lineLink}${snippet}\n`);
     }
     md.appendMarkdown("\n");
   }
 
-  // ── Fix hint ─────────────────────────────────────────────────────────────
+  // ── Fix hint + clickable guard action ────────────────────────────────────
   if (sp.fix_hint) {
     md.appendMarkdown(`---\n\n💡 **Fix Hint:** ${sp.fix_hint}\n`);
+
+    // Only show the apply button when we have a concrete line to fix.
+    // Failure types that have no deterministic guard (e.g. bounds_exceeded,
+    // regime_shift, logical_invariant) will still show the hint text above.
+    const GUARDABLE: ReadonlySet<string> = new Set([
+      "division_instability",
+      "division_by_zero",
+      "non_psd_matrix",
+      "ill_conditioned_matrix",
+      "nan_inf",
+    ]);
+
+    if (sp.line !== null && GUARDABLE.has(sp.failure_type)) {
+      // Encode args as a JSON array for the command: URI scheme.
+      // VS Code deserialises these as plain JS values, so vscode.Uri objects
+      // must be passed as strings — the command handler accepts both.
+      const args = encodeURIComponent(
+        JSON.stringify([documentUri.toString(), sp.line, sp.failure_type]),
+      );
+      md.appendMarkdown(
+        `\n\n[$(shield) Apply Mathematical Guard](command:blackswan.applyGuard?${args}` +
+          ` "Run the deterministic fixer and preview the diff")`,
+      );
+    }
   }
 
   return md;
@@ -203,7 +240,16 @@ export class BlackSwanHoverProvider
     );
     if (!match) return undefined;
 
-    return new vscode.Hover(buildHoverContent(match, document.uri));
+    // Pass a live line reader so each causal-chain node shows its source text.
+    // The callback is defined inline here to keep buildHoverContent free of
+    // any direct dependency on vscode.TextDocument (it stays pure / testable).
+    const getLineText = (line1Based: number): string | undefined => {
+      const idx = line1Based - 1;
+      if (idx < 0 || idx >= document.lineCount) return undefined;
+      return document.lineAt(idx).text;
+    };
+
+    return new vscode.Hover(buildHoverContent(match, document.uri, getLineText));
   }
 
   dispose(): void {

@@ -189,9 +189,20 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
     // ── Apply deterministic mathematical guard ────────────────────────────
+    //
+    // The `uriOrString` argument can be either a proper vscode.Uri (when
+    // called from the Problems-panel Quick Fix action, which passes
+    // document.uri directly) OR a plain string (when called from a hover
+    // tooltip command link, which serialises args through JSON and therefore
+    // loses the Uri class).  Both paths are handled below.
     vscode.commands.registerCommand(
       "blackswan.applyGuard",
-      async (uri: vscode.Uri, line: number, failureType: FailureType) => {
+      async (uriOrString: vscode.Uri | string, line: number, failureType: FailureType) => {
+        const uri =
+          typeof uriOrString === "string"
+            ? vscode.Uri.parse(uriOrString)
+            : uriOrString;
+
         let document: vscode.TextDocument;
         try {
           document = await vscode.workspace.openTextDocument(uri);
