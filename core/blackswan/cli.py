@@ -146,6 +146,27 @@ def _build_parser() -> argparse.ArgumentParser:
             "When unset, auto-detects: terminal → text, piped → json."
         ),
     )
+    test_p.add_argument(
+        "--output",
+        choices=["sarif"],
+        default=None,
+        dest="output_type",
+        help=(
+            "Emit results in a structured format for CI integration. "
+            "'sarif' writes a SARIF 2.1.0 document for GitHub Code Scanning. "
+            "Use with --output-path to write to a file."
+        ),
+    )
+    test_p.add_argument(
+        "--output-path",
+        default=None,
+        dest="output_path",
+        metavar="FILE",
+        help=(
+            "File path for --output results (e.g. results.sarif). "
+            "If omitted, writes to stdout."
+        ),
+    )
 
     # ── fix subcommand ──────────────────────────────────────────────────────
     fix_p = subparsers.add_parser(
@@ -272,6 +293,20 @@ def _cmd_test(args: argparse.Namespace) -> None:
         mode=effective_mode,
         iterations_requested=effective_iterations,
     )
+
+    # ── SARIF output (takes priority over --format) ─────────────────────────
+    output_type = getattr(args, "output_type", None)
+    if output_type == "sarif":
+        from .sarif import to_sarif
+        sarif_doc = to_sarif(response, file_path)
+        sarif_json = json.dumps(sarif_doc, indent=2)
+        output_path = getattr(args, "output_path", None)
+        if output_path:
+            Path(output_path).write_text(sarif_json, encoding="utf-8")
+        else:
+            print(sarif_json)
+        has_failures = any(b.total_occurrences > 0 for b in result.root_cause_buckets)
+        sys.exit(1 if has_failures else 0)
 
     # Output format: explicit flag > TTY detection.
     #   terminal (isatty)  → human-readable text report
