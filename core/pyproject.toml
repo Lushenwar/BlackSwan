@@ -51,6 +51,10 @@ dependencies = [
 fixer = [
     "libcst>=1.1",
 ]
+# Install with: pip install blackswan[mcp]
+mcp = [
+    "mcp>=1.0",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=4.1",
@@ -67,7 +71,8 @@ Changelog     = "https://github.com/Lushenwar/BlackSwan/blob/main/CHANGELOG.md"
 "Bug Tracker" = "https://github.com/Lushenwar/BlackSwan/issues"
 
 [project.scripts]
-blackswan = "blackswan.cli:main"
+blackswan     = "blackswan.cli:main"
+blackswan-mcp = "blackswan.mcp_server:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
