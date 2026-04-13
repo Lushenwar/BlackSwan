@@ -35,3 +35,17 @@ status_utf8.txt
 extension/node_modules/
 extension/out/
 extension/dist/
+
+# Build / packaging artifacts
+*.egg-info/
+dist/
+build/
+
+# Knowledge graph outputs (generated, not source)
+graphify-out/
+.graphify_*
+
+# Temp / local files
+.agent/
+list.txt
+pypath.txt
