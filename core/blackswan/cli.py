@@ -135,6 +135,17 @@ def _build_parser() -> argparse.ArgumentParser:
             "scenario's default. Takes precedence over --iterations when both are set."
         ),
     )
+    test_p.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default=None,
+        dest="output_format",
+        help=(
+            "Output format. 'text' prints a human-readable terminal report. "
+            "'json' prints the raw JSON response (default when stdout is piped). "
+            "When unset, auto-detects: terminal → text, piped → json."
+        ),
+    )
 
     # ── fix subcommand ──────────────────────────────────────────────────────
     fix_p = subparsers.add_parser(
@@ -253,18 +264,27 @@ def _cmd_test(args: argparse.Namespace) -> None:
 
     result = runner.run()
 
-    # Emit the full JSON response to stdout.
-    print(json.dumps(
-        _build_response(
-            result=result,
-            scenario=scenario,
-            seed=seed,
-            file_path=file_path,
-            mode=effective_mode,
-            iterations_requested=effective_iterations,
-        ),
-        indent=2,
-    ))
+    response = _build_response(
+        result=result,
+        scenario=scenario,
+        seed=seed,
+        file_path=file_path,
+        mode=effective_mode,
+        iterations_requested=effective_iterations,
+    )
+
+    # Output format: explicit flag > TTY detection.
+    #   terminal (isatty)  → human-readable text report
+    #   piped / explicit   → JSON  (keeps the extension bridge working)
+    output_format = getattr(args, "output_format", None)
+    if output_format is None:
+        output_format = "text" if sys.stdout.isatty() else "json"
+
+    if output_format == "text":
+        from ._render import render
+        render(response)
+    else:
+        print(json.dumps(response, indent=2))
 
     has_failures = any(b.total_occurrences > 0 for b in result.root_cause_buckets)
     sys.exit(1 if has_failures else 0)
