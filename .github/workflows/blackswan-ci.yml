@@ -1,0 +1,136 @@
+name: BlackSwan CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Core Python engine — tests + coverage
+  # ---------------------------------------------------------------------------
+  test-core:
+    name: Test blackswan-core (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    defaults:
+      run:
+        working-directory: core
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install blackswan-core (dev extras)
+        run: pip install -e ".[dev]"
+
+      - name: Run tests with coverage
+        run: pytest --tb=short -q
+
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.11'
+        uses: codecov/codecov-action@v4
+        with:
+          files: core/.coverage
+          fail_ci_if_error: false
+
+  # ---------------------------------------------------------------------------
+  # SARIF stress scan — runs BlackSwan on its own fixture files and uploads
+  # the results to GitHub Code Scanning.
+  # ---------------------------------------------------------------------------
+  sarif-scan:
+    name: BlackSwan SARIF scan
+    runs-on: ubuntu-latest
+    # Only run on the main branch to avoid noise on PRs from forks.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      security-events: write  # required for upload-sarif
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install blackswan-core
+        run: pip install -e core/
+
+      - name: Run BlackSwan on fixture files and emit SARIF
+        run: |
+          mkdir -p sarif-results
+
+          # Scan each fixture that is expected to have failures.
+          for fixture in \
+            core/tests/fixtures/broken_covariance.py \
+            core/tests/fixtures/division_edge.py \
+            core/tests/fixtures/overflow_leverage.py; do
+
+            if [ ! -f "$fixture" ]; then
+              echo "Skipping missing fixture: $fixture"
+              continue
+            fi
+
+            name=$(basename "$fixture" .py)
+            echo "Scanning $fixture → sarif-results/${name}.sarif"
+
+            python -m blackswan test "$fixture" \
+              --scenario liquidity_crash \
+              --seed 42 \
+              --iterations 1000 \
+              --output sarif \
+              --output-path "sarif-results/${name}.sarif" \
+              || true  # exit 1 when failures found is expected — don't abort CI
+          done
+
+      - name: Merge SARIF files
+        run: |
+          # GitHub upload-sarif accepts a directory of SARIF files.
+          ls -la sarif-results/
+
+      - name: Upload SARIF results to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: sarif-results/
+          category: blackswan
+        # Don't fail the job if no SARIF files were produced
+        continue-on-error: true
+
+  # ---------------------------------------------------------------------------
+  # Extension TypeScript — lint + type-check
+  # ---------------------------------------------------------------------------
+  test-extension:
+    name: TypeScript type-check
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: extension
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npx tsc --noEmit
