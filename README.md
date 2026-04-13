@@ -3,12 +3,11 @@
 [![PyPI version](https://img.shields.io/pypi/v/blackswan?color=black&label=blackswan)](https://pypi.org/project/blackswan/)
 [![Python](https://img.shields.io/pypi/pyversions/blackswan)](https://pypi.org/project/blackswan/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![CI](https://img.shields.io/github/actions/workflow/status/Lushenwar/BlackSwan/workflow.yml?label=build)](https://github.com/Lushenwar/BlackSwan/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/Lushenwar/BlackSwan/blackswan-ci.yml?label=build)](https://github.com/Lushenwar/BlackSwan/actions)
 
 **A debugger for mathematical fragility.**
 
 <img width="1280" height="720" alt="logo" src="https://github.com/user-attachments/assets/a1437241-bbd4-4134-ba24-a3cfa1421918" />
-
 
 BlackSwan stress-tests financial and mathematical Python code to find the exact line where your model breaks under extreme conditions — before your clients do.
 
@@ -27,31 +26,27 @@ Given a Python function containing numerical or financial logic, BlackSwan:
 ```
 $ python -m blackswan test models/risk.py --scenario liquidity_crash
 
-{
-  "status": "failures_detected",
-  "runtime_ms": 2840,
-  "iterations_completed": 5000,
-  "summary": {
-    "total_failures": 847,
-    "failure_rate": 0.1694,
-    "unique_failure_types": 1
-  },
-  "shatter_points": [
-    {
-      "line": 36,
-      "severity": "critical",
-      "failure_type": "non_psd_matrix",
-      "message": "Covariance matrix loses positive semi-definiteness when pairwise correlation exceeds 0.91. Smallest eigenvalue: -0.0034.",
-      "frequency": "847 / 5000 iterations (16.9%)",
-      "causal_chain": [
-        { "line": 8,  "variable": "correlation", "role": "root_input" },
-        { "line": 31, "variable": "corr_matrix",  "role": "intermediate" },
-        { "line": 36, "variable": "cov_matrix",   "role": "failure_site" }
-      ],
-      "fix_hint": "Apply nearest-PSD correction (Higham 2002) after correlation perturbation, or clamp eigenvalues to epsilon."
-    }
-  ]
-}
+  BlackSwan 0.4.0  ·  liquidity_crash  ·  5,000 iterations  ·  seed 42  ·  full
+
+  ── FAILURES DETECTED  (1 shatter point) ─────────────────────────────────────────
+
+   CRITICAL   Non-PSD Matrix                                            line 82
+
+  Covariance matrix loses positive semi-definiteness when pairwise
+  correlation exceeds 0.91. Smallest eigenvalue: -0.0034.
+
+  Frequency   ████████░░░░░░░░░░░░░░░░░░░░  16.9%  847 / 5000 iterations
+  Confidence  high
+
+  Causal Chain ────────────────────────────
+    →  line 14    corr_shift              root input
+    ·  line 47    adjusted_corr_matrix    intermediate
+    ►  line 82    cov_matrix              FAILURE SITE
+
+  Fix Hint     Apply nearest-PSD correction (Higham 2002) after correlation
+               perturbation, or clamp eigenvalues to epsilon.
+
+  Quick Fix   $ python -m blackswan fix risk.py --line 82 --type non_psd_matrix
 ```
 
 ---
@@ -70,6 +65,12 @@ With the mathematical auto-fixer (requires `libcst`):
 pip install blackswan[fixer]
 ```
 
+With the Claude MCP server:
+
+```bash
+pip install blackswan[mcp]
+```
+
 Requires Python 3.11+.
 
 ### VS Code Extension
@@ -79,7 +80,6 @@ Requires Python 3.11+.
 </p>
 
 **v0.4.0** — Download [`blackswan-vscode-0.4.0.vsix`](https://github.com/Lushenwar/BlackSwan/releases/latest) from Releases and install it manually:
-
 
 ```bash
 code --install-extension blackswan-vscode-0.4.0.vsix
@@ -110,7 +110,7 @@ Once installed, open any Python file containing numerical logic and click **▶ 
 | `blackswan.pythonPath` | _(auto)_ | Python executable path. Falls back to the Python extension's interpreter. |
 | `blackswan.mode` | `fast` | `fast` for responsive IDE feedback; `full` for verified attribution. |
 | `blackswan.maxRuntimeSec` | _(none)_ | Hard time cap in seconds. Engine stops early if exceeded. |
-| `blackswan.geminiModel` | `gemini-2.5-flash` | Gemini model used for AI failure explanations. Run **BlackSwan: Set Gemini API Key** to configure your key. |
+| `blackswan.claudeModel` | `claude-sonnet-4-20250514` | Claude model for AI failure explanations. Run **BlackSwan: Set Anthropic API Key** to configure. |
 
 ### Auto-Fixer
 
@@ -119,7 +119,7 @@ Every red squiggle has three Quick Fix options in the lightbulb menu:
 | Action | What it does |
 |---|---|
 | **Apply Mathematical Guard** | Rewrites the failing line using a deterministic libcst guard (epsilon clamp, PSD correction, conditional `pinv`, or `nan_to_num`). Shows a side-by-side diff before applying — fully undoable. |
-| **Explain with BlackSwan AI** | Sends the failure metadata (type, frequency, causal chain, fix hint — never source code) to Gemini and displays a plain-English explanation in a side panel. |
+| **Explain with BlackSwan AI** | Sends the failure metadata (type, frequency, causal chain, fix hint — never source code) to Claude and displays a plain-English explanation in a side panel. |
 | **Insert comment hint** | Adds an indented `# BlackSwan Fix Hint:` comment directly below the failing line — no subprocess, no API. |
 
 **Supported guard types:**
@@ -137,25 +137,34 @@ Every red squiggle has three Quick Fix options in the lightbulb menu:
 # Install the fixer extra
 pip install blackswan[fixer]
 
-# Get a JSON fix proposal for any line
-python -m blackswan fix models/risk.py --line 36 --type non_psd_matrix
+# Apply a mathematical guard at a detected failure line
+python -m blackswan fix models/risk.py --line 82 --type non_psd_matrix
 ```
 
 **AI explanations (BYOK):**
 
-1. Run the command **BlackSwan: Set Gemini API Key** from the Command Palette (`Ctrl+Shift+P`)
-2. Paste your [Gemini API key](https://aistudio.google.com/app/apikey) — stored encrypted in VS Code's SecretStorage, never in settings or source
+1. Run the command **BlackSwan: Set Anthropic API Key** from the Command Palette (`Ctrl+Shift+P`)
+2. Paste your [Anthropic API key](https://console.anthropic.com/) — stored encrypted in VS Code's SecretStorage, never in settings or source
 3. Click **Explain with BlackSwan AI** on any failure
-
-Rate limit: 15 requests per minute (Gemini free tier). The extension enforces this in-process.
 
 ---
 
 ### CLI
 
 ```bash
-# Run standard Monte Carlo stress test (5 000 iterations, seed 42)
+# Run standard Monte Carlo stress test (human-readable terminal output)
 python -m blackswan test models/risk.py --scenario liquidity_crash
+
+# JSON output (pipe-safe — auto-detected when stdout is not a TTY)
+python -m blackswan test models/risk.py --scenario liquidity_crash | jq .
+
+# Explicit format flags
+python -m blackswan test models/risk.py --scenario liquidity_crash --format text
+python -m blackswan test models/risk.py --scenario liquidity_crash --format json
+
+# SARIF output for GitHub Code Scanning / any SARIF-aware CI tool
+python -m blackswan test models/risk.py --scenario liquidity_crash --output sarif
+python -m blackswan test models/risk.py --scenario liquidity_crash --output sarif --output-path results.sarif
 
 # Specify a target function explicitly
 python -m blackswan test models/risk.py --scenario vol_spike --function calculate_var
@@ -163,7 +172,7 @@ python -m blackswan test models/risk.py --scenario vol_spike --function calculat
 # Override iteration count and seed
 python -m blackswan test models/risk.py --scenario correlation_breakdown --iterations 10000 --seed 123
 
-# Fast mode — skips attribution replay, findings marked 'unverified' (default in VS Code)
+# Fast mode — skips attribution replay (default in VS Code)
 python -m blackswan test models/risk.py --scenario liquidity_crash --mode fast
 
 # Full mode — Two-Path engine with Slow-Path attribution replay (highest confidence)
@@ -175,22 +184,123 @@ python -m blackswan test models/risk.py --scenario liquidity_crash --adversarial
 # Budget flags — stop early if a time or iteration limit is hit
 python -m blackswan test models/risk.py --scenario liquidity_crash --max-runtime-sec 30
 python -m blackswan test models/risk.py --scenario liquidity_crash --max-iterations 2000
+
+# List available scenarios
+python -m blackswan --list-scenarios
 ```
 
 **Exit codes:** `0` = no failures, `1` = failures detected, `2` = engine error.
+
+---
+
+### SARIF and CI Integration
+
+BlackSwan emits [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) for GitHub Code Scanning and any SARIF-aware CI tool.
+
+**Emit SARIF from CLI:**
+
+```bash
+python -m blackswan test models/risk.py \
+  --scenario liquidity_crash \
+  --output sarif \
+  --output-path results.sarif
+```
+
+**Upload to GitHub Code Scanning** (`.github/workflows/blackswan-ci.yml` is pre-configured in this repo):
+
+```yaml
+- name: Run BlackSwan stress scan
+  run: |
+    python -m blackswan test models/risk.py \
+      --scenario liquidity_crash --seed 42 \
+      --output sarif --output-path results.sarif || true
+
+- name: Upload SARIF
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: results.sarif
+    category: blackswan
+```
+
+Each SARIF result includes:
+- The exact source line as the primary location
+- Causal chain links as clickable `relatedLocations` (GitHub shows them as annotation links)
+- Fix hints embedded as `fixes` entries
+- Severity mapped to SARIF levels (`critical` → `error`, `warning` → `warning`)
+
+---
+
+### MCP Server (Claude Code Integration)
+
+BlackSwan exposes a [Model Context Protocol](https://modelcontextprotocol.io/) server so Claude can run stress tests directly from your IDE conversation.
+
+**Install:**
+
+```bash
+pip install blackswan[mcp]
+```
+
+**Configure in `claude_desktop_config.json`:**
+
+```json
+{
+  "mcpServers": {
+    "blackswan": {
+      "command": "blackswan-mcp"
+    }
+  }
+}
+```
+
+Or without installing:
+
+```json
+{
+  "mcpServers": {
+    "blackswan": {
+      "command": "python",
+      "args": ["-m", "blackswan.mcp_server"]
+    }
+  }
+}
+```
+
+**Available MCP tools:**
+
+| Tool | Description |
+|---|---|
+| `run_blackswan` | Run a stress test on a Python file — returns the full findings dict |
+| `list_scenarios` | List all preset scenarios with descriptions and perturbation targets |
+| `get_finding_detail` | Extract a specific shatter point by id from a previous result |
+| `explain_finding` | Return a Markdown explanation of what a failure type means and why it matters |
+
+Once configured, you can ask Claude: *"Run BlackSwan on my portfolio model with the correlation_breakdown scenario"* and get findings, causal chains, and fix hints directly in the conversation.
+
+---
 
 ### Python API
 
 ```python
 from blackswan.engine.runner import StressRunner
 from blackswan.scenarios.registry import load_scenario
+from blackswan.parser.auto_tagger import AutoTagger
+from pathlib import Path
 
+file_path = Path("models/risk.py")
 scenario = load_scenario("liquidity_crash")
-runner = StressRunner(scenario)
-result = runner.run(calculate_portfolio_var, base_inputs={"weights": w, "vol": v, "correlation": 0.0})
+detectors = AutoTagger(file_path).detector_suite()
 
-for finding in result.findings:
-    print(f"Line {finding.line}: {finding.message} ({finding.severity})")
+runner = StressRunner(
+    fn=calculate_portfolio_var,
+    base_inputs={"weights": w, "vol": v, "correlation": 0.0},
+    scenario=scenario,
+    detectors=detectors,
+    seed=42,
+)
+result = runner.run()
+
+for bucket in result.root_cause_buckets:
+    print(f"Line {bucket.line}: {bucket.message} ({bucket.occurrence_rate:.1%})")
 ```
 
 ---
@@ -207,7 +317,7 @@ Every run emits a **ReproducibilityCard** — a machine-readable provenance reco
 
 ```json
 "reproducibility_card": {
-  "blackswan_version": "0.3.0",
+  "blackswan_version": "0.4.0",
   "python_version": "3.11.9",
   "numpy_version": "1.26.4",
   "platform": "linux",
@@ -240,7 +350,7 @@ All scenarios are reproducible YAML files — same seed always produces identica
 
 ## Failure Detectors
 
-BlackSwan runs up to 5 detectors concurrently on every iteration:
+BlackSwan auto-selects detectors from AST analysis of the target file — no configuration required.
 
 | Detector | What it catches |
 |---|---|
@@ -252,8 +362,6 @@ BlackSwan runs up to 5 detectors concurrently on every iteration:
 | `ExplodingGradientDetector` | Output growth > 100× input perturbation magnitude |
 | `RegimeShiftDetector` | Structural breaks in output distribution across iterations |
 | `LogicalInvariantDetector` | User-defined assertion violations (e.g. weights must sum to 1) |
-
-Detectors are auto-tagged to relevant lines via AST analysis — no configuration required.
 
 ---
 
@@ -288,12 +396,12 @@ BlackSwan is intentionally scoped to portfolio risk, covariance/correlation anal
 ```
 blackswan/
 ├── engine/
-│   ├── runner.py          # Monte Carlo StressRunner
+│   ├── runner.py          # Monte Carlo StressRunner (Two-Path: Fast + Slow)
 │   ├── adversarial.py     # Evolutionary EvolutionaryStressRunner + HardnessAdaptor
 │   ├── perturbation.py    # Perturbation application from scenario YAML
 │   └── validator.py       # PlausibilityValidator — filters impossible inputs
 ├── detectors/
-│   ├── base.py            # FailureDetector ABC + Finding dataclass
+│   ├── base.py            # FailureDetector ABC + Finding + TriggerDisclosure
 │   ├── numerical.py       # NaNInf, DivisionStability, ExplodingGradient, RegimeShift, LogicalInvariant
 │   ├── matrix.py          # MatrixPSD, ConditionNumber
 │   ├── portfolio.py       # BoundsDetector
@@ -308,6 +416,10 @@ blackswan/
 ├── attribution/
 │   ├── traceback.py       # Proximate failure location
 │   └── causal_chain.py    # DAG walk → root cause ranking
+├── fixer/
+│   └── guards.py          # Deterministic libcst guards (PSD, epsilon, pinv, nan_to_num)
+├── sarif.py               # SARIF 2.1.0 serializer for GitHub Code Scanning / CI
+├── mcp_server.py          # Claude MCP server (stdio) — run_blackswan, list_scenarios, explain
 └── cli.py                 # argparse CLI entry point
 ```
 

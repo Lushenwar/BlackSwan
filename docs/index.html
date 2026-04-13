@@ -963,6 +963,7 @@
       <li><a href="#features">Features</a></li>
       <li><a href="#scenarios">Scenarios</a></li>
       <li><a href="#install">Install</a></li>
+      <li><a href="https://github.com/Lushenwar/BlackSwan/blob/main/README.md#mcp-server-claude-code-integration" target="_blank" rel="noopener">MCP</a></li>
       <li><a href="https://github.com/Lushenwar/BlackSwan" target="_blank" rel="noopener">Docs</a></li>
     </ul>
     <div class="nav-cta">
@@ -1071,7 +1072,7 @@
     <div class="container">
       <div class="stats-inner">
         <div class="stat-item reveal">
-          <div class="stat-value" style="color: var(--red);">5</div>
+          <div class="stat-value" style="color: var(--red);">8</div>
           <div class="stat-label">Failure detector types</div>
         </div>
         <div class="stat-item reveal reveal-delay-1">
@@ -1087,7 +1088,7 @@
           <div class="stat-label">Time to first finding</div>
         </div>
         <div class="stat-item reveal reveal-delay-4">
-          <div class="stat-value">508</div>
+          <div class="stat-value">581</div>
           <div class="stat-label">Tests passing</div>
         </div>
       </div>
@@ -1101,7 +1102,7 @@
         <div class="section-label reveal">Live demo</div>
         <h2 class="section-title reveal reveal-delay-1" id="demo-heading">See it find the break</h2>
         <p class="section-sub reveal reveal-delay-2" style="margin: 0 auto; text-align: center;">
-          One command. Five thousand simulations. One exact line.
+          One command. Five thousand simulations. One exact line — with causal chain, frequency, and a ready-to-apply fix.
         </p>
       </div>
 
@@ -1125,8 +1126,8 @@
   <section class="features-section" id="features" aria-labelledby="features-heading">
     <div class="container">
       <div class="section-label reveal">How it works</div>
-      <h2 class="section-title reveal reveal-delay-1" id="features-heading">Three things no linter can do</h2>
-      <p class="section-sub reveal reveal-delay-2">Standard linters catch syntax errors. BlackSwan catches the math that looks correct until a 3-sigma event hits it.</p>
+      <h2 class="section-title reveal reveal-delay-1" id="features-heading">What no linter can do</h2>
+      <p class="section-sub reveal reveal-delay-2">Standard linters catch syntax errors. BlackSwan catches the math that looks correct until a 3-sigma event hits it — and tells you exactly where, why, and how to fix it.</p>
 
       <div class="features-grid" role="list">
 
@@ -1140,7 +1141,7 @@
             <circle cx="18" cy="20" r="3" fill="var(--red)"/>
           </svg>
           <h3 class="feature-title">Finds the exact line</h3>
-          <p class="feature-desc">Not "your matrix might be unstable." The exact line. The exact condition. How many times out of 5,000 it broke under that market scenario.</p>
+          <p class="feature-desc">Not "your matrix might be unstable." The exact line. The exact condition. How many times out of 5,000 it broke under that market scenario. 8 detector types run automatically — no configuration.</p>
           <span class="feature-highlight feature-highlight-red">line 82 · 16.9% failure rate</span>
         </article>
 
@@ -1155,7 +1156,7 @@
             <path d="M8 12 L8 24" stroke="var(--amber)" stroke-width="1.5" stroke-dasharray="2 2"/>
           </svg>
           <h3 class="feature-title">Traces the full causal chain</h3>
-          <p class="feature-desc">Every failure includes a dependency walk: which root input caused which intermediate variable to drift, finally breaking the math at which line.</p>
+          <p class="feature-desc">Every failure includes a dependency walk: which root input caused which intermediate variable to drift, finally breaking the math at which line. Two-Path attribution with Slow-Path replay for verified, high-confidence results.</p>
           <span class="feature-highlight feature-highlight-amber">corr_shift → adj_matrix → cov_matrix</span>
         </article>
 
@@ -1168,6 +1169,44 @@
           <h3 class="feature-title">Auto-fixes with a deterministic guard</h3>
           <p class="feature-desc">For each shatter point, BlackSwan generates a mathematically sound fix — a nearest-PSD correction, an epsilon clamp, a denominator guard — and applies it in one command.</p>
           <span class="feature-highlight feature-highlight-green">Higham 2002 nearest-PSD applied</span>
+        </article>
+
+        <article class="feature-card reveal" role="listitem">
+          <div class="feature-num">04</div>
+          <svg class="feature-icon" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+            <rect x="4" y="8" width="28" height="20" rx="3" stroke="var(--blue)" stroke-width="1.5"/>
+            <line x1="4" y1="14" x2="32" y2="14" stroke="var(--border-mid)" stroke-width="1"/>
+            <circle cx="10" cy="11" r="2" fill="var(--red)"/>
+            <circle cx="17" cy="11" r="2" fill="var(--amber)"/>
+            <circle cx="24" cy="11" r="2" fill="var(--green)"/>
+            <path d="M10 20 L14 24 L26 18" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <h3 class="feature-title">CI and Claude integration</h3>
+          <p class="feature-desc">Emit SARIF 2.1.0 for GitHub Code Scanning with one flag. Or run stress tests directly from a Claude conversation via the MCP server — findings, causal chains, and fix hints without leaving your IDE.</p>
+          <span class="feature-highlight feature-highlight-green">--output sarif &nbsp;·&nbsp; blackswan-mcp</span>
+        </article>
+
+        <article class="feature-card reveal reveal-delay-1" role="listitem">
+          <div class="feature-num">05</div>
+          <svg class="feature-icon" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+            <path d="M6 10 L18 6 L30 10 L30 20 C30 26 24 30 18 32 C12 30 6 26 6 20 Z" stroke="var(--purple)" stroke-width="1.5" fill="rgba(167,139,250,0.08)"/>
+            <path d="M13 18 L17 22 L23 14" stroke="var(--purple)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <h3 class="feature-title">Fully reproducible results</h3>
+          <p class="feature-desc">Every run emits a ReproducibilityCard: exact BlackSwan version, NumPy version, scenario hash, seed, and a ready-to-paste replay command. Same seed, same scenario, same results — always.</p>
+          <span class="feature-highlight feature-highlight-amber">seed 42 · scenario_hash a3f9c2</span>
+        </article>
+
+        <article class="feature-card reveal reveal-delay-2" role="listitem">
+          <div class="feature-num">06</div>
+          <svg class="feature-icon" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+            <circle cx="18" cy="18" r="12" stroke="var(--red)" stroke-width="1.5"/>
+            <path d="M18 10 L18 18 L24 22" stroke="var(--red)" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="18" cy="18" r="2" fill="var(--red)"/>
+          </svg>
+          <h3 class="feature-title">Adversarial stress mode</h3>
+          <p class="feature-desc">Beyond random Monte Carlo: a genetic algorithm evolves perturbation sets toward worst-case inputs. A HardnessAdaptor ramps intensity when no failures are found, so robust code is actually tested hard.</p>
+          <span class="feature-highlight feature-highlight-red">--adversarial --population 200</span>
         </article>
 
       </div>
@@ -1251,15 +1290,15 @@
     <div class="container">
       <div style="text-align: center;">
         <div class="section-label reveal" style="justify-content: center;">Get started</div>
-        <h2 class="section-title reveal reveal-delay-1" id="install-heading">One install. Two interfaces.</h2>
-        <p class="section-sub reveal reveal-delay-2" style="margin: 0 auto; text-align: center; margin-bottom: 0;">Use BlackSwan as a CLI tool, Python API, or VS Code extension — the engine is the same.</p>
+        <h2 class="section-title reveal reveal-delay-1" id="install-heading">One install. Every interface.</h2>
+        <p class="section-sub reveal reveal-delay-2" style="margin: 0 auto; text-align: center; margin-bottom: 0;">CLI, Python API, VS Code extension, GitHub Actions, and Claude MCP — the engine is the same in all of them.</p>
       </div>
 
       <div class="install-grid reveal reveal-delay-2">
 
         <div class="install-card">
           <div class="install-card-header">
-            <span class="install-card-title">pip — Python package</span>
+            <span class="install-card-title">pip — base package</span>
             <button class="copy-btn" onclick="copyText('pip install blackswan', this)" aria-label="Copy pip install command">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
               Copy
@@ -1297,6 +1336,35 @@
             <span class="ic-prompt">$ </span><span class="ic-cmd">code --install-extension</span> <span class="ic-pkg">blackswan.vsix</span>
           </div>
         </div>
+      </div>
+
+      <div style="margin-top: 20px;" class="install-grid">
+
+        <div class="install-card">
+          <div class="install-card-header">
+            <span class="install-card-title">SARIF — GitHub Code Scanning</span>
+            <button class="copy-btn" onclick="copyText('python -m blackswan test risk_model.py --scenario liquidity_crash --output sarif --output-path results.sarif', this)" aria-label="Copy SARIF command">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+              Copy
+            </button>
+          </div>
+          <div class="install-code" style="white-space: pre; overflow-x: auto;">
+<span class="ic-prompt">$ </span><span class="ic-cmd">python -m blackswan</span> <span class="ic-pkg">test</span> risk_model.py <span class="ic-flag">--scenario</span> liquidity_crash <span class="ic-flag">--output</span> sarif <span class="ic-flag">--output-path</span> results.sarif</div>
+        </div>
+
+        <div class="install-card">
+          <div class="install-card-header">
+            <span class="install-card-title">Claude MCP — run from any conversation</span>
+            <button class="copy-btn" onclick="copyText('pip install blackswan[mcp]', this)" aria-label="Copy MCP install command">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+              Copy
+            </button>
+          </div>
+          <div class="install-code">
+            <span class="ic-prompt">$ </span><span class="ic-cmd">pip install</span> <span class="ic-pkg">blackswan</span><span class="ic-flag">[mcp]</span> <span style="color:var(--text-3);">&amp;&amp; blackswan-mcp</span>
+          </div>
+        </div>
+
       </div>
 
       <p class="install-note reveal">
@@ -1389,7 +1457,7 @@
       { type: 'blank', delay: 400 },
 
       // Stage 1: header
-      { type: 'line', delay: 600, content: '  BlackSwan v0.4.0  ·  liquidity_crash  ·  5000 iterations  ·  seed 42', class: 'term-dim' },
+      { type: 'line', delay: 600, content: '  BlackSwan 0.4.0  ·  liquidity_crash  ·  5,000 iterations  ·  seed 42  ·  full          3.4s', class: 'term-dim' },
       { type: 'blank', delay: 100 },
 
       // Stage 2: progress
@@ -1397,35 +1465,37 @@
       { type: 'blank', delay: 100 },
 
       // Stage 3: findings header
-      { type: 'line', delay: 2800, content: '  SHATTER POINTS DETECTED', class: 'term-red term-bold' },
-      { type: 'blank', delay: 100 },
-      { type: 'line', delay: 200, content: '  ── critical ──────────────────────────────────────────────────', class: 'term-dim' },
-      { type: 'blank', delay: 50 },
+      { type: 'line', delay: 2800, content: '── FAILURES DETECTED  (1 shatter point) ───────────────────────────────────────', class: 'term-red term-bold' },
+      { type: 'blank', delay: 80 },
 
-      // Stage 4: finding
-      { type: 'line', delay: 300, content: '  LINE 82    non_psd_matrix', class: 'term-red term-bold' },
-      { type: 'line', delay: 100, content: '  Covariance matrix loses positive semi-definiteness when', class: 'term-white' },
-      { type: 'line', delay: 60,  content: '  pairwise correlation exceeds 0.91. Min eigenvalue: −0.0034.', class: 'term-white' },
-      { type: 'line', delay: 100, content: '  Frequency: 847 / 5000 iterations (16.9%)', class: 'term-amber' },
-      { type: 'blank', delay: 100 },
+      // Stage 4: finding badge + message
+      { type: 'line', delay: 300, content: '   CRITICAL   Non-PSD Matrix                                          line 82', class: 'term-red term-bold' },
+      { type: 'blank', delay: 60 },
+      { type: 'line', delay: 100, content: '  Covariance matrix loses positive semi-definiteness when pairwise', class: 'term-white' },
+      { type: 'line', delay: 60,  content: '  correlation exceeds 0.91. Smallest eigenvalue: −0.0034.', class: 'term-white' },
+      { type: 'blank', delay: 80 },
+      { type: 'line', delay: 100, content: '  Frequency   ████████░░░░░░░░░░░░░░░░░░░░  16.9%  847 / 5000 iterations', class: 'term-amber' },
+      { type: 'line', delay: 80,  content: '  Confidence  high', class: 'term-green' },
+      { type: 'blank', delay: 80 },
 
       // Stage 5: causal chain
-      { type: 'line', delay: 200, content: '  Causal chain:', class: 'term-dim' },
-      { type: 'line', delay: 150, content: '    line 14    corr_shift              [root input]', class: 'term-output' },
-      { type: 'line', delay: 120, content: '    line 47    adjusted_corr_matrix    [intermediate]', class: 'term-output' },
-      { type: 'line', delay: 120, content: '    line 82    cov_matrix              [failure site] ←', class: 'term-red' },
-      { type: 'blank', delay: 100 },
+      { type: 'line', delay: 200, content: '  Causal Chain ────────────────────────', class: 'term-dim' },
+      { type: 'line', delay: 150, content: '    →  line 14    corr_shift              root input', class: 'term-blue' },
+      { type: 'line', delay: 120, content: '    ·  line 47    adjusted_corr_matrix    intermediate', class: 'term-dim' },
+      { type: 'line', delay: 120, content: '    ►  line 82    cov_matrix              FAILURE SITE', class: 'term-red' },
+      { type: 'blank', delay: 80 },
 
       // Stage 6: fix hint
-      { type: 'line', delay: 200, content: '  Fix: Apply nearest-PSD correction (Higham 2002) after', class: 'term-green' },
-      { type: 'line', delay: 60,  content: '  correlation perturbation, or clamp eigenvalues to ε.', class: 'term-green' },
+      { type: 'line', delay: 200, content: '  Fix Hint   Apply nearest-PSD correction (Higham 2002) after', class: 'term-amber' },
+      { type: 'line', delay: 60,  content: '             correlation perturbation, or clamp eigenvalues to ε.', class: 'term-amber' },
+      { type: 'blank', delay: 80 },
+      { type: 'line', delay: 100, content: '  Quick Fix  $ python -m blackswan fix risk_model.py --line 82 --type non_psd_matrix', class: 'term-green' },
       { type: 'blank', delay: 100 },
 
       // Stage 7: summary
-      { type: 'line', delay: 300, content: '  ── summary ────────────────────────────────────────────────────', class: 'term-dim' },
-      { type: 'line', delay: 100, content: '  total_failures: 847    failure_rate: 16.94%    runtime: 3.4s', class: 'term-dim' },
-      { type: 'blank', delay: 100 },
-      { type: 'line', delay: 100, content: '  Exit code 1 (failures detected)', class: 'term-dim' },
+      { type: 'line', delay: 300, content: '  1 failures  ·  16.9% rate  ·  1 unique type  ·  3.4s', class: 'term-dim' },
+      { type: 'blank', delay: 60 },
+      { type: 'line', delay: 100, content: '  Add --format json for machine-readable output. Add --output sarif for CI.', class: 'term-dim' },
     ];
 
     const termBody = document.getElementById('terminal-body');
